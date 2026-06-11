@@ -103,7 +103,7 @@
         <button class="save button-fofo" id="salvarProdutoBtn">
           💾 Salvar Produto
         </button>
-        <p id="erroCadastro" style="color: #d35f5f; margin-top: 8px; font-size: 14px;"></p>
+        <p id="erroCadastro" style="color: #d35f5f; margin-top: 8px; font-size: 16px;"></p>
       </div>
 
       <div class="card">
@@ -124,7 +124,9 @@
 
       <h2>🗺️ MAPA DA SALA G</h2>
 
-      <svg id="mapa" viewBox="0 0 1250 800" class="mapa"></svg>
+      <div class="mapa-container">
+        <svg id="mapa" viewBox="0 0 1250 800" class="mapa"></svg>
+      </div>
 
       <div class="rodape">
         💡 Clique em uma estante para ver os produtos cadastrados! 🐻
@@ -252,7 +254,7 @@ async function exibirProdutosCadastrados() {
   listaProdutos.innerHTML = '';
   
   if (produtos.length === 0) {
-    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f;">🐻 Nenhum produto cadastrado ainda!</p>';
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado ainda!</p>';
   } else {
     const ul = document.createElement('ul');
     ul.style.listStyle = 'none';
@@ -268,28 +270,33 @@ async function exibirProdutosCadastrados() {
       li.style.display = 'flex';
       li.style.justifyContent = 'space-between';
       li.style.alignItems = 'center';
+      li.style.flexDirection = 'column';
       
       const infoProduto = document.createElement('div');
       infoProduto.style.flex = '1';
+      infoProduto.style.width = '100%';
       infoProduto.innerHTML = `
-        <strong>📌 Código:</strong> ${produto.codigo}<br>
-        <strong>📝 Descrição:</strong> ${produto.descricao}<br>
-        <strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}<br>
-        <strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 60px; padding: 4px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center;">
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 80px; padding: 6px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center; font-size: 16px;"></p>
       `;
       
       const divBotoes = document.createElement('div');
       divBotoes.style.display = 'flex';
       divBotoes.style.gap = '8px';
+      divBotoes.style.justifyContent = 'center';
+      divBotoes.style.marginTop = '10px';
       
       const botaoAtualizar = document.createElement('button');
       botaoAtualizar.textContent = '🔄 Atualizar';
-      botaoAtualizar.style.padding = '6px 12px';
+      botaoAtualizar.style.padding = '8px 16px';
       botaoAtualizar.style.backgroundColor = '#f5e6d3';
       botaoAtualizar.style.color = '#8b4513';
       botaoAtualizar.style.border = 'none';
       botaoAtualizar.style.borderRadius = '4px';
       botaoAtualizar.style.cursor = 'pointer';
+      botaoAtualizar.style.fontSize = '16px';
       botaoAtualizar.onclick = async () => {
         const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
         if (novaQuantidade && !isNaN(novaQuantidade)) {
@@ -303,12 +310,13 @@ async function exibirProdutosCadastrados() {
       
       const botaoRemover = document.createElement('button');
       botaoRemover.textContent = '🗑️ Remover';
-      botaoRemover.style.padding = '6px 12px';
+      botaoRemover.style.padding = '8px 16px';
       botaoRemover.style.backgroundColor = '#f8c8c8';
       botaoRemover.style.color = '#8b0000';
       botaoRemover.style.border = 'none';
       botaoRemover.style.borderRadius = '4px';
       botaoRemover.style.cursor = 'pointer';
+      botaoRemover.style.fontSize = '16px';
       botaoRemover.onclick = async () => {
         if (confirm('🐻 Tem certeza que deseja remover este produto?')) {
           await removerProduto(index);
@@ -392,16 +400,16 @@ async function buscarProduto() {
   );
   
   if (produtosEncontrados.length === 0) {
-    resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f;">🐻 Nenhum produto encontrado!</p>';
+    resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">🐻 Nenhum produto encontrado!</p>';
   } else {
     resultadoBusca.innerHTML = '<ul style="list-style: none; padding: 0;">';
     produtosEncontrados.forEach(produto => {
       resultadoBusca.innerHTML += `
-        <li style="margin-bottom: 10px; padding: 10px; border: 2px solid #f5e6d3; border-radius: 8px; background: #fffaf0;">
-          <strong>📌 Código:</strong> ${produto.codigo}<br>
-          <strong>📝 Descrição:</strong> ${produto.descricao}<br>
-          <strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}<br>
-          <strong>📊 Quantidade:</strong> ${produto.quantidade}
+        <li style="margin-bottom: 10px; padding: 10px; border: 2px solid #f5e6d3; border-radius: 8px; background: #fffaf0; font-size: 16px;">
+          <p style="margin: 5px 0;"><strong>📌 Código:</strong> ${produto.codigo}</p>
+          <p style="margin: 5px 0;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+          <p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
+          <p style="margin: 5px 0;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
         </li>
       `;
     });
@@ -438,7 +446,7 @@ estantes.forEach(estante => {
   texto.setAttribute("text-anchor", "middle");
   texto.setAttribute("dominant-baseline", "middle");
   texto.setAttribute("fill", "#8b4513");
-  texto.setAttribute("font-size", "14");
+  texto.setAttribute("font-size", "16");
   texto.setAttribute("font-weight", "bold");
   texto.textContent = estante.n;
   
@@ -470,41 +478,52 @@ preencherSelectEstantes();
     padding: 0;
     background-color: var(--bege-fundo);
     font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
   }
 
   .app {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 10px;
   }
 
   header {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
     margin-bottom: 20px;
+    text-align: center;
   }
 
   .title {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: bold;
     color: var(--bege-escuro);
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
   }
 
   .actions button {
-    margin-left: 10px;
+    margin: 5px;
     cursor: pointer;
   }
 
   .button-fofo {
-    padding: 10px 20px;
+    padding: 12px 20px;
     background-color: var(--bege-claro);
     color: var(--bege-escuro);
     border: 2px solid var(--bege-escuro);
     border-radius: 20px;
     font-family: 'Comic Sans MS', cursive, sans-serif;
     font-weight: bold;
+    font-size: 16px;
     transition: all 0.3s;
   }
 
@@ -516,18 +535,19 @@ preencherSelectEstantes();
 
   .content {
     display: flex;
+    flex-direction: column;
     gap: 20px;
   }
 
   aside {
-    width: 300px;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 20px;
   }
 
   main {
-    flex: 1;
+    width: 100%;
   }
 
   .card {
@@ -551,16 +571,18 @@ preencherSelectEstantes();
     margin-top: 12px;
     font-weight: bold;
     color: var(--bege-escuro);
+    font-size: 16px;
   }
 
   .input-fofo {
     width: 100%;
-    padding: 10px;
+    padding: 12px;
     margin-top: 6px;
     border: 2px solid var(--bege-claro);
     border-radius: 8px;
     background-color: #fff;
     font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
   }
 
   .input-fofo:focus {
@@ -580,15 +602,23 @@ preencherSelectEstantes();
   .save {
     margin-top: 20px;
     width: 100%;
+    font-size: 16px;
+  }
+
+  .mapa-container {
+    width: 100%;
+    overflow-x: auto;
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    background-color: var(--bege-fundo);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 
   .mapa {
     width: 100%;
     height: auto;
-    border: 2px solid var(--bege-claro);
-    border-radius: 12px;
-    background-color: var(--bege-fundo);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    min-width: 600px;
+    display: block;
   }
 
   .rodape {
@@ -596,7 +626,7 @@ preencherSelectEstantes();
     font-style: italic;
     color: var(--bege-escuro);
     text-align: center;
-    font-size: 16px;
+    font-size: 18px;
   }
 
   .result {
@@ -605,6 +635,7 @@ preencherSelectEstantes();
     border: 2px solid var(--bege-claro);
     border-radius: 8px;
     background: var(--bege-fundo);
+    font-size: 16px;
   }
 
   .modal {
@@ -624,7 +655,7 @@ preencherSelectEstantes();
     background: var(--bege-fundo);
     padding: 25px;
     border-radius: 12px;
-    width: 80%;
+    width: 90%;
     max-width: 700px;
     max-height: 80%;
     overflow: auto;
@@ -636,7 +667,7 @@ preencherSelectEstantes();
     color: var(--bege-escuro);
     margin-top: 0;
     text-align: center;
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .close {
@@ -661,8 +692,45 @@ preencherSelectEstantes();
   }
 
   .numero {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: bold;
+  }
+
+  /* Media Queries para responsividade */
+  @media (min-width: 768px) {
+    .content {
+      flex-direction: row;
+    }
+    
+    aside {
+      width: 300px;
+    }
+    
+    main {
+      flex: 1;
+    }
+    
+    header {
+      flex-direction: row;
+      justify-content: space-between;
+    }
+    
+    .title {
+      font-size: 28px;
+      text-align: left;
+    }
+    
+    .actions {
+      justify-content: flex-end;
+    }
+    
+    .mapa-container {
+      min-width: auto;
+    }
+    
+    .mapa {
+      min-width: auto;
+    }
   }
 </style>
 
