@@ -74,10 +74,16 @@
         <h2>📦 CADASTRO DE PRODUTO</h2>
 
         <label>Código do Produto</label>
-        <input type="text" id="codigoProduto" class="input-fofo">
+        <input type="text" id="codigoProduto" class="input-fofo" placeholder="Ex: TB001">
 
         <label>Descrição</label>
-        <input type="text" id="descricaoProduto" class="input-fofo">
+        <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
+
+        <label>Cor</label>
+        <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco, Rosa">
+
+        <label>Modelo</label>
+        <input type="text" id="modeloProduto" class="input-fofo" placeholder="Ex: Grande, Médio, Pequeno">
 
         <label>Quantidade</label>
         <input type="number" id="quantidadeProduto" class="input-fofo">
@@ -109,7 +115,7 @@
       <div class="card">
         <h2>🔍 BUSCAR PRODUTO</h2>
 
-        <input type="text" id="buscaProduto" class="input-fofo">
+        <input type="text" id="buscaProduto" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo ou estante">
 
         <button class="save button-fofo" id="localizarProdutoBtn">
           🔎 Localizar
@@ -239,7 +245,7 @@ async function exibirProdutosEstante(estanteNumero) {
   } else {
     let mensagem = `📦 Produtos na Estante ${estanteNumero}:\n\n`;
     produtosEstante.forEach(produto => {
-      mensagem += `Código: ${produto.codigo}\nDescrição: ${produto.descricao}\nQuantidade: ${produto.quantidade}\nNível: ${produto.nivel}\n\n`;
+      mensagem += `Código: ${produto.codigo}\nDescrição: ${produto.descricao}\nCor: ${produto.cor}\nModelo: ${produto.modelo}\nQuantidade: ${produto.quantidade}\nNível: ${produto.nivel}\n\n`;
     });
     alert(mensagem);
   }
@@ -278,6 +284,8 @@ async function exibirProdutosCadastrados() {
       infoProduto.innerHTML = `
         <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 80px; padding: 6px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center; font-size: 16px;"></p>
       `;
@@ -355,26 +363,33 @@ function fecharModal() {
 async function salvarProduto() {
   const codigo = document.getElementById('codigoProduto').value.trim();
   const descricao = document.getElementById('descricaoProduto').value.trim();
+  const cor = document.getElementById('corProduto').value.trim();
+  const modelo = document.getElementById('modeloProduto').value.trim();
   const quantidade = document.getElementById('quantidadeProduto').value.trim();
   const estante = document.getElementById('estanteSelect').value;
   const nivel = document.getElementById('nivelSelect').value;
   const erroCadastro = document.getElementById('erroCadastro');
   
   // Validações
-  if (!codigo || !descricao || !quantidade || !estante || !nivel) {
+  if (!codigo || !descricao || !cor || !modelo || !quantidade || !estante || !nivel) {
     erroCadastro.textContent = '❌ Preencha todos os campos!';
     return;
   }
   
   const produtos = await window.carregarProdutos();
-  const codigoJaExiste = produtos.some(produto => produto.codigo === codigo);
+  // Verifica se já existe um produto com o mesmo código, cor e modelo
+  const produtoJaExiste = produtos.some(produto => 
+    produto.codigo === codigo && 
+    produto.cor === cor && 
+    produto.modelo === modelo
+  );
   
-  if (codigoJaExiste) {
-    erroCadastro.textContent = '❌ Código de produto já cadastrado!';
+  if (produtoJaExiste) {
+    erroCadastro.textContent = '❌ Este produto (código + cor + modelo) já está cadastrado!';
     return;
   }
   
-  const novoProduto = { codigo, descricao, quantidade, estante, nivel };
+  const novoProduto = { codigo, descricao, cor, modelo, quantidade, estante, nivel };
   produtos.push(novoProduto);
   await window.salvarProdutos(produtos);
   
@@ -384,6 +399,8 @@ async function salvarProduto() {
   // Limpar campos
   document.getElementById('codigoProduto').value = '';
   document.getElementById('descricaoProduto').value = '';
+  document.getElementById('corProduto').value = '';
+  document.getElementById('modeloProduto').value = '';
   document.getElementById('quantidadeProduto').value = '';
 }
 
@@ -396,6 +413,8 @@ async function buscarProduto() {
   const produtosEncontrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
+    produto.cor.toLowerCase().includes(busca) ||
+    produto.modelo.toLowerCase().includes(busca) ||
     produto.estante.toString().includes(busca)
   );
   
@@ -408,6 +427,8 @@ async function buscarProduto() {
         <li style="margin-bottom: 10px; padding: 10px; border: 2px solid #f5e6d3; border-radius: 8px; background: #fffaf0; font-size: 16px;">
           <p style="margin: 5px 0;"><strong>📌 Código:</strong> ${produto.codigo}</p>
           <p style="margin: 5px 0;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+          <p style="margin: 5px 0;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+          <p style="margin: 5px 0;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
           <p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
           <p style="margin: 5px 0;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
         </li>
@@ -660,7 +681,7 @@ preencherSelectEstantes();
     max-height: 80%;
     overflow: auto;
     border: 2px solid var(--bege-claro);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
   }
 
   .modal-content h2 {
