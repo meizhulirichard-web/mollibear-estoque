@@ -1,3 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Estoque - Mollibear 🧸</title>
+  <!-- Firebase SDK v10 -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyD3j7NdARKWfcyQcaG5dX6VAghuTfCMX68",
+      authDomain: "mollibear-estoque.firebaseapp.com",
+      projectId: "mollibear-estoque",
+      storageBucket: "mollibear-estoque.firebasestorage.app",
+      messagingSenderId: "168767505828",
+      appId: "1:168767505828:web:50410e7841162296572d31",
+      measurementId: "G-QM20K794M8"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Função para carregar os produtos do Firestore
+    async function carregarProdutos() {
+      try {
+        const docRef = doc(db, "estoque", "produtos");
+        const docSnap = await getDoc(docRef);
+        return docSnap.exists() ? docSnap.data().produtos || [] : [];
+      } catch (error) {
+        console.error("Erro ao carregar produtos:", error);
+        return [];
+      }
+    }
+
+    // Função para salvar os produtos no Firestore
+    async function salvarProdutos(produtos) {
+      try {
+        await setDoc(doc(db, "estoque", "produtos"), { produtos });
+      } catch (error) {
+        console.error("Erro ao salvar produtos:", error);
+      }
+    }
+
+    // Tornar as funções globais para serem usadas no script principal
+    window.carregarProdutos = carregarProdutos;
+    window.salvarProdutos = salvarProdutos;
+  </script>
+</head>
+<body>
+
 <div class="app">
 
   <header>
@@ -161,17 +216,6 @@ const estantes = [
   {n:51, x:920, y:170, w:55, h:100, c:"#e6d4f1"}
 ];
 
-// Função para carregar os produtos salvos no localStorage
-function carregarProdutos() {
-  const produtos = JSON.parse(localStorage.getItem('produtos')) || [];
-  return produtos;
-}
-
-// Função para salvar os produtos no localStorage
-function salvarProdutos(produtos) {
-  localStorage.setItem('produtos', JSON.stringify(produtos));
-}
-
 // Função para preencher o select de estantes
 function preencherSelectEstantes() {
   const estanteSelect = document.getElementById('estanteSelect');
@@ -184,8 +228,8 @@ function preencherSelectEstantes() {
 }
 
 // Função para exibir os produtos de uma estante
-function exibirProdutosEstante(estanteNumero) {
-  const produtos = carregarProdutos();
+async function exibirProdutosEstante(estanteNumero) {
+  const produtos = await window.carregarProdutos();
   const produtosEstante = produtos.filter(produto => produto.estante == estanteNumero);
   
   if (produtosEstante.length === 0) {
@@ -200,8 +244,8 @@ function exibirProdutosEstante(estanteNumero) {
 }
 
 // Função para exibir todos os produtos cadastrados
-function exibirProdutosCadastrados() {
-  const produtos = carregarProdutos();
+async function exibirProdutosCadastrados() {
+  const produtos = await window.carregarProdutos();
   const listaProdutos = document.getElementById('listaProdutosCadastrados');
   const modal = document.getElementById('produtosCadastradosModal');
   
@@ -246,11 +290,11 @@ function exibirProdutosCadastrados() {
       botaoAtualizar.style.border = 'none';
       botaoAtualizar.style.borderRadius = '4px';
       botaoAtualizar.style.cursor = 'pointer';
-      botaoAtualizar.onclick = () => {
+      botaoAtualizar.onclick = async () => {
         const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
         if (novaQuantidade && !isNaN(novaQuantidade)) {
           produtos[index].quantidade = novaQuantidade;
-          salvarProdutos(produtos);
+          await window.salvarProdutos(produtos);
           alert('✅ Quantidade atualizada com sucesso!');
         } else {
           alert('❌ Insira uma quantidade válida!');
@@ -265,9 +309,9 @@ function exibirProdutosCadastrados() {
       botaoRemover.style.border = 'none';
       botaoRemover.style.borderRadius = '4px';
       botaoRemover.style.cursor = 'pointer';
-      botaoRemover.onclick = () => {
+      botaoRemover.onclick = async () => {
         if (confirm('🐻 Tem certeza que deseja remover este produto?')) {
-          removerProduto(index);
+          await removerProduto(index);
         }
       };
       
@@ -286,11 +330,11 @@ function exibirProdutosCadastrados() {
 }
 
 // Função para remover um produto
-function removerProduto(index) {
-  const produtos = carregarProdutos();
+async function removerProduto(index) {
+  const produtos = await window.carregarProdutos();
   produtos.splice(index, 1);
-  salvarProdutos(produtos);
-  exibirProdutosCadastrados();
+  await window.salvarProdutos(produtos);
+  await exibirProdutosCadastrados();
   alert('🗑️ Produto removido com sucesso!');
 }
 
@@ -300,7 +344,7 @@ function fecharModal() {
 }
 
 // Função para salvar um novo produto
-function salvarProduto() {
+async function salvarProduto() {
   const codigo = document.getElementById('codigoProduto').value.trim();
   const descricao = document.getElementById('descricaoProduto').value.trim();
   const quantidade = document.getElementById('quantidadeProduto').value.trim();
@@ -314,7 +358,7 @@ function salvarProduto() {
     return;
   }
   
-  const produtos = carregarProdutos();
+  const produtos = await window.carregarProdutos();
   const codigoJaExiste = produtos.some(produto => produto.codigo === codigo);
   
   if (codigoJaExiste) {
@@ -324,7 +368,7 @@ function salvarProduto() {
   
   const novoProduto = { codigo, descricao, quantidade, estante, nivel };
   produtos.push(novoProduto);
-  salvarProdutos(produtos);
+  await window.salvarProdutos(produtos);
   
   alert('💾 Produto salvo com sucesso!');
   erroCadastro.textContent = '';
@@ -336,9 +380,9 @@ function salvarProduto() {
 }
 
 // Função para buscar um produto
-function buscarProduto() {
+async function buscarProduto() {
   const busca = document.getElementById('buscaProduto').value.toLowerCase();
-  const produtos = carregarProdutos();
+  const produtos = await window.carregarProdutos();
   const resultadoBusca = document.getElementById('resultadoBusca');
   
   const produtosEncontrados = produtos.filter(produto => 
@@ -621,3 +665,6 @@ preencherSelectEstantes();
     font-weight: bold;
   }
 </style>
+
+</body>
+</html>
