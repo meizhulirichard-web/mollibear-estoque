@@ -1,0 +1,623 @@
+<div class="app">
+
+  <header>
+    <div class="title">
+      🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻
+    </div>
+
+    <div class="actions">
+      <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
+      <button class="button-fofo">❓ Sobre</button>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <aside>
+
+      <div class="card">
+        <h2>📦 CADASTRO DE PRODUTO</h2>
+
+        <label>Código do Produto</label>
+        <input type="text" id="codigoProduto" class="input-fofo">
+
+        <label>Descrição</label>
+        <input type="text" id="descricaoProduto" class="input-fofo">
+
+        <label>Quantidade</label>
+        <input type="number" id="quantidadeProduto" class="input-fofo">
+
+        <div class="row">
+          <div>
+            <label>Estante</label>
+            <select id="estanteSelect" class="input-fofo"></select>
+          </div>
+
+          <div>
+            <label>Nível</label>
+            <select id="nivelSelect" class="input-fofo">
+              <option>A</option>
+              <option>B</option>
+              <option>C</option>
+              <option>D</option>
+              <option>E</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="save button-fofo" id="salvarProdutoBtn">
+          💾 Salvar Produto
+        </button>
+        <p id="erroCadastro" style="color: #d35f5f; margin-top: 8px; font-size: 14px;"></p>
+      </div>
+
+      <div class="card">
+        <h2>🔍 BUSCAR PRODUTO</h2>
+
+        <input type="text" id="buscaProduto" class="input-fofo">
+
+        <button class="save button-fofo" id="localizarProdutoBtn">
+          🔎 Localizar
+        </button>
+
+        <div class="result" id="resultadoBusca"></div>
+      </div>
+
+    </aside>
+
+    <main>
+
+      <h2>🗺️ MAPA DA SALA G</h2>
+
+      <svg id="mapa" viewBox="0 0 1250 800" class="mapa"></svg>
+
+      <div class="rodape">
+        💡 Clique em uma estante para ver os produtos cadastrados! 🐻
+      </div>
+
+      <div id="produtosCadastradosModal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <span class="close">&times;</span>
+          <h2>📋 Produtos Cadastrados</h2>
+          <div id="listaProdutosCadastrados"></div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+</div>
+
+<script>
+// Dados das estantes
+const estantes = [
+  // ESQUERDA
+  {n:1, x:10, y:610, w:55, h:90, c:"#f5e6d3"},
+  {n:2, x:10, y:510, w:55, h:90, c:"#f5e6d3"},
+  {n:3, x:10, y:410, w:55, h:90, c:"#f5e6d3"},
+  {n:4, x:10, y:310, w:55, h:90, c:"#f5e6d3"},
+  {n:5, x:10, y:210, w:55, h:90, c:"#f5e6d3"},
+  {n:6, x:10, y:110, w:55, h:90, c:"#f5e6d3"},
+
+  // DIREITA
+  {n:7, x:1175, y:610, w:55, h:90, c:"#f5e6d3"},
+  {n:8, x:1175, y:510, w:55, h:90, c:"#f5e6d3"},
+  {n:9, x:1175, y:410, w:55, h:90, c:"#f5e6d3"},
+  {n:10, x:1175, y:310, w:55, h:90, c:"#f5e6d3"},
+  {n:11, x:1175, y:210, w:55, h:90, c:"#f5e6d3"},
+  {n:12, x:1175, y:110, w:55, h:90, c:"#f5e6d3"},
+
+  // VERMELHAS
+  {n:13, x:320, y:610, w:140, h:45, c:"#f8c8c8"},
+  {n:14, x:460, y:610, w:140, h:45, c:"#f8c8c8"},
+  {n:15, x:600, y:610, w:140, h:45, c:"#f8c8c8"},
+  {n:16, x:740, y:610, w:140, h:45, c:"#f8c8c8"},
+  {n:17, x:880, y:610, w:140, h:45, c:"#f8c8c8"},
+
+  {n:18, x:320, y:565, w:140, h:45, c:"#f8c8c8"},
+  {n:19, x:460, y:565, w:140, h:45, c:"#f8c8c8"},
+  {n:20, x:600, y:565, w:140, h:45, c:"#f8c8c8"},
+  {n:21, x:740, y:565, w:140, h:45, c:"#f8c8c8"},
+  {n:22, x:880, y:565, w:140, h:45, c:"#f8c8c8"},
+
+  {n:23, x:320, y:520, w:140, h:45, c:"#f8c8c8"},
+  {n:24, x:460, y:520, w:140, h:45, c:"#f8c8c8"},
+  {n:25, x:600, y:520, w:140, h:45, c:"#f8c8c8"},
+  {n:26, x:880, y:520, w:140, h:45, c:"#f8c8c8"},
+
+  {n:27, x:320, y:475, w:140, h:45, c:"#f8c8c8"},
+  {n:28, x:460, y:475, w:140, h:45, c:"#f8c8c8"},
+  {n:29, x:600, y:475, w:140, h:45, c:"#f8c8c8"},
+  {n:30, x:740, y:475, w:140, h:45, c:"#f8c8c8"},
+  {n:31, x:880, y:475, w:140, h:45, c:"#f8c8c8"},
+
+  // AZUIS
+  {n:37, x:260, y:320, w:60, h:100, c:"#d4e6f1"},
+
+  {n:32, x:320, y:365, w:140, h:45, c:"#d4e6f1"},
+  {n:33, x:460, y:365, w:140, h:45, c:"#d4e6f1"},
+  {n:34, x:600, y:365, w:140, h:45, c:"#d4e6f1"},
+  {n:35, x:740, y:365, w:140, h:45, c:"#d4e6f1"},
+  {n:36, x:880, y:365, w:140, h:45, c:"#d4e6f1"},
+
+  {n:38, x:320, y:320, w:140, h:45, c:"#d4e6f1"},
+  {n:39, x:460, y:320, w:140, h:45, c:"#d4e6f1"},
+  {n:40, x:600, y:320, w:140, h:45, c:"#d4e6f1"},
+  {n:41, x:740, y:320, w:140, h:45, c:"#d4e6f1"},
+  {n:42, x:880, y:320, w:140, h:45, c:"#d4e6f1"},
+
+  // ROXAS
+  {n:46, x:360, y:180, w:140, h:45, c:"#e6d4f1"},
+  {n:45, x:500, y:180, w:140, h:45, c:"#e6d4f1"},
+  {n:44, x:640, y:180, w:140, h:45, c:"#e6d4f1"},
+  {n:43, x:780, y:180, w:140, h:45, c:"#e6d4f1"},
+
+  {n:47, x:360, y:135, w:140, h:45, c:"#e6d4f1"},
+  {n:48, x:500, y:135, w:140, h:45, c:"#e6d4f1"},
+  {n:49, x:640, y:135, w:140, h:45, c:"#e6d4f1"},
+  {n:50, x:780, y:135, w:140, h:45, c:"#e6d4f1"},
+
+  {n:51, x:920, y:170, w:55, h:100, c:"#e6d4f1"}
+];
+
+// Função para carregar os produtos salvos no localStorage
+function carregarProdutos() {
+  const produtos = JSON.parse(localStorage.getItem('produtos')) || [];
+  return produtos;
+}
+
+// Função para salvar os produtos no localStorage
+function salvarProdutos(produtos) {
+  localStorage.setItem('produtos', JSON.stringify(produtos));
+}
+
+// Função para preencher o select de estantes
+function preencherSelectEstantes() {
+  const estanteSelect = document.getElementById('estanteSelect');
+  estantes.forEach(estante => {
+    const option = document.createElement('option');
+    option.value = estante.n;
+    option.textContent = `Estante ${estante.n}`;
+    estanteSelect.appendChild(option);
+  });
+}
+
+// Função para exibir os produtos de uma estante
+function exibirProdutosEstante(estanteNumero) {
+  const produtos = carregarProdutos();
+  const produtosEstante = produtos.filter(produto => produto.estante == estanteNumero);
+  
+  if (produtosEstante.length === 0) {
+    alert(`🐻 Estante ${estanteNumero} não possui produtos cadastrados!`);
+  } else {
+    let mensagem = `📦 Produtos na Estante ${estanteNumero}:\n\n`;
+    produtosEstante.forEach(produto => {
+      mensagem += `Código: ${produto.codigo}\nDescrição: ${produto.descricao}\nQuantidade: ${produto.quantidade}\nNível: ${produto.nivel}\n\n`;
+    });
+    alert(mensagem);
+  }
+}
+
+// Função para exibir todos os produtos cadastrados
+function exibirProdutosCadastrados() {
+  const produtos = carregarProdutos();
+  const listaProdutos = document.getElementById('listaProdutosCadastrados');
+  const modal = document.getElementById('produtosCadastradosModal');
+  
+  listaProdutos.innerHTML = '';
+  
+  if (produtos.length === 0) {
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f;">🐻 Nenhum produto cadastrado ainda!</p>';
+  } else {
+    const ul = document.createElement('ul');
+    ul.style.listStyle = 'none';
+    ul.style.padding = '0';
+    
+    produtos.forEach((produto, index) => {
+      const li = document.createElement('li');
+      li.style.marginBottom = '15px';
+      li.style.padding = '12px';
+      li.style.border = '2px solid #f5e6d3';
+      li.style.borderRadius = '8px';
+      li.style.backgroundColor = '#fffaf0';
+      li.style.display = 'flex';
+      li.style.justifyContent = 'space-between';
+      li.style.alignItems = 'center';
+      
+      const infoProduto = document.createElement('div');
+      infoProduto.style.flex = '1';
+      infoProduto.innerHTML = `
+        <strong>📌 Código:</strong> ${produto.codigo}<br>
+        <strong>📝 Descrição:</strong> ${produto.descricao}<br>
+        <strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}<br>
+        <strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 60px; padding: 4px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center;">
+      `;
+      
+      const divBotoes = document.createElement('div');
+      divBotoes.style.display = 'flex';
+      divBotoes.style.gap = '8px';
+      
+      const botaoAtualizar = document.createElement('button');
+      botaoAtualizar.textContent = '🔄 Atualizar';
+      botaoAtualizar.style.padding = '6px 12px';
+      botaoAtualizar.style.backgroundColor = '#f5e6d3';
+      botaoAtualizar.style.color = '#8b4513';
+      botaoAtualizar.style.border = 'none';
+      botaoAtualizar.style.borderRadius = '4px';
+      botaoAtualizar.style.cursor = 'pointer';
+      botaoAtualizar.onclick = () => {
+        const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
+        if (novaQuantidade && !isNaN(novaQuantidade)) {
+          produtos[index].quantidade = novaQuantidade;
+          salvarProdutos(produtos);
+          alert('✅ Quantidade atualizada com sucesso!');
+        } else {
+          alert('❌ Insira uma quantidade válida!');
+        }
+      };
+      
+      const botaoRemover = document.createElement('button');
+      botaoRemover.textContent = '🗑️ Remover';
+      botaoRemover.style.padding = '6px 12px';
+      botaoRemover.style.backgroundColor = '#f8c8c8';
+      botaoRemover.style.color = '#8b0000';
+      botaoRemover.style.border = 'none';
+      botaoRemover.style.borderRadius = '4px';
+      botaoRemover.style.cursor = 'pointer';
+      botaoRemover.onclick = () => {
+        if (confirm('🐻 Tem certeza que deseja remover este produto?')) {
+          removerProduto(index);
+        }
+      };
+      
+      divBotoes.appendChild(botaoAtualizar);
+      divBotoes.appendChild(botaoRemover);
+      
+      li.appendChild(infoProduto);
+      li.appendChild(divBotoes);
+      ul.appendChild(li);
+    });
+    
+    listaProdutos.appendChild(ul);
+  }
+  
+  modal.style.display = 'block';
+}
+
+// Função para remover um produto
+function removerProduto(index) {
+  const produtos = carregarProdutos();
+  produtos.splice(index, 1);
+  salvarProdutos(produtos);
+  exibirProdutosCadastrados();
+  alert('🗑️ Produto removido com sucesso!');
+}
+
+// Função para fechar o modal
+function fecharModal() {
+  document.getElementById('produtosCadastradosModal').style.display = 'none';
+}
+
+// Função para salvar um novo produto
+function salvarProduto() {
+  const codigo = document.getElementById('codigoProduto').value.trim();
+  const descricao = document.getElementById('descricaoProduto').value.trim();
+  const quantidade = document.getElementById('quantidadeProduto').value.trim();
+  const estante = document.getElementById('estanteSelect').value;
+  const nivel = document.getElementById('nivelSelect').value;
+  const erroCadastro = document.getElementById('erroCadastro');
+  
+  // Validações
+  if (!codigo || !descricao || !quantidade || !estante || !nivel) {
+    erroCadastro.textContent = '❌ Preencha todos os campos!';
+    return;
+  }
+  
+  const produtos = carregarProdutos();
+  const codigoJaExiste = produtos.some(produto => produto.codigo === codigo);
+  
+  if (codigoJaExiste) {
+    erroCadastro.textContent = '❌ Código de produto já cadastrado!';
+    return;
+  }
+  
+  const novoProduto = { codigo, descricao, quantidade, estante, nivel };
+  produtos.push(novoProduto);
+  salvarProdutos(produtos);
+  
+  alert('💾 Produto salvo com sucesso!');
+  erroCadastro.textContent = '';
+  
+  // Limpar campos
+  document.getElementById('codigoProduto').value = '';
+  document.getElementById('descricaoProduto').value = '';
+  document.getElementById('quantidadeProduto').value = '';
+}
+
+// Função para buscar um produto
+function buscarProduto() {
+  const busca = document.getElementById('buscaProduto').value.toLowerCase();
+  const produtos = carregarProdutos();
+  const resultadoBusca = document.getElementById('resultadoBusca');
+  
+  const produtosEncontrados = produtos.filter(produto => 
+    produto.codigo.toLowerCase().includes(busca) || 
+    produto.descricao.toLowerCase().includes(busca) || 
+    produto.estante.toString().includes(busca)
+  );
+  
+  if (produtosEncontrados.length === 0) {
+    resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f;">🐻 Nenhum produto encontrado!</p>';
+  } else {
+    resultadoBusca.innerHTML = '<ul style="list-style: none; padding: 0;">';
+    produtosEncontrados.forEach(produto => {
+      resultadoBusca.innerHTML += `
+        <li style="margin-bottom: 10px; padding: 10px; border: 2px solid #f5e6d3; border-radius: 8px; background: #fffaf0;">
+          <strong>📌 Código:</strong> ${produto.codigo}<br>
+          <strong>📝 Descrição:</strong> ${produto.descricao}<br>
+          <strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}<br>
+          <strong>📊 Quantidade:</strong> ${produto.quantidade}
+        </li>
+      `;
+    });
+    resultadoBusca.innerHTML += '</ul>';
+  }
+}
+
+// Inicializar o SVG e os eventos
+const svg = document.querySelector(".mapa");
+const NS = "http://www.w3.org/2000/svg";
+
+estantes.forEach(estante => {
+  const rect = document.createElementNS(NS, "rect");
+  rect.setAttribute("x", estante.x);
+  rect.setAttribute("y", estante.y);
+  rect.setAttribute("width", estante.w);
+  rect.setAttribute("height", estante.h);
+  rect.setAttribute("rx", 5);
+  rect.setAttribute("fill", estante.c);
+  rect.setAttribute("class", "estante");
+  rect.setAttribute("stroke", "#8b4513");
+  rect.setAttribute("stroke-width", "1");
+  
+  rect.addEventListener("click", () => {
+    exibirProdutosEstante(estante.n);
+  });
+  
+  svg.appendChild(rect);
+  
+  const texto = document.createElementNS(NS, "text");
+  texto.setAttribute("x", estante.x + estante.w / 2);
+  texto.setAttribute("y", estante.y + estante.h / 2);
+  texto.setAttribute("class", "numero");
+  texto.setAttribute("text-anchor", "middle");
+  texto.setAttribute("dominant-baseline", "middle");
+  texto.setAttribute("fill", "#8b4513");
+  texto.setAttribute("font-size", "14");
+  texto.setAttribute("font-weight", "bold");
+  texto.textContent = estante.n;
+  
+  svg.appendChild(texto);
+});
+
+// Adicionar eventos aos botões
+document.getElementById('salvarProdutoBtn').addEventListener('click', salvarProduto);
+document.getElementById('localizarProdutoBtn').addEventListener('click', buscarProduto);
+document.getElementById('produtosCadastradosBtn').addEventListener('click', exibirProdutosCadastrados);
+document.querySelector('.close').addEventListener('click', fecharModal);
+
+// Inicializar o select de estantes
+preencherSelectEstantes();
+</script>
+
+<style>
+  :root {
+    --bege-claro: #f5e6d3;
+    --bege-escuro: #8b4513;
+    --bege-fundo: #fffaf0;
+    --rosa-suave: #f8c8c8;
+    --azul-suave: #d4e6f1;
+    --roxo-suave: #e6d4f1;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bege-fundo);
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+  }
+
+  .app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .title {
+    font-size: 28px;
+    font-weight: bold;
+    color: var(--bege-escuro);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .actions button {
+    margin-left: 10px;
+    cursor: pointer;
+  }
+
+  .button-fofo {
+    padding: 10px 20px;
+    background-color: var(--bege-claro);
+    color: var(--bege-escuro);
+    border: 2px solid var(--bege-escuro);
+    border-radius: 20px;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-weight: bold;
+    transition: all 0.3s;
+  }
+
+  .button-fofo:hover {
+    background-color: var(--bege-escuro);
+    color: var(--bege-fundo);
+    transform: scale(1.05);
+  }
+
+  .content {
+    display: flex;
+    gap: 20px;
+  }
+
+  aside {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  main {
+    flex: 1;
+  }
+
+  .card {
+    background: var(--bege-fundo);
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .card h2 {
+    margin-top: 0;
+    font-size: 20px;
+    color: var(--bege-escuro);
+    border-bottom: 2px solid var(--bege-claro);
+    padding-bottom: 10px;
+  }
+
+  .card label {
+    display: block;
+    margin-top: 12px;
+    font-weight: bold;
+    color: var(--bege-escuro);
+  }
+
+  .input-fofo {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+  }
+
+  .input-fofo:focus {
+    border-color: var(--bege-escuro);
+    outline: none;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .row div {
+    flex: 1;
+  }
+
+  .save {
+    margin-top: 20px;
+    width: 100%;
+  }
+
+  .mapa {
+    width: 100%;
+    height: auto;
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    background-color: var(--bege-fundo);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .rodape {
+    margin-top: 15px;
+    font-style: italic;
+    color: var(--bege-escuro);
+    text-align: center;
+    font-size: 16px;
+  }
+
+  .result {
+    margin-top: 16px;
+    padding: 12px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background: var(--bege-fundo);
+  }
+
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: var(--bege-fundo);
+    padding: 25px;
+    border-radius: 12px;
+    width: 80%;
+    max-width: 700px;
+    max-height: 80%;
+    overflow: auto;
+    border: 2px solid var(--bege-claro);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .modal-content h2 {
+    color: var(--bege-escuro);
+    margin-top: 0;
+    text-align: center;
+    font-size: 24px;
+  }
+
+  .close {
+    float: right;
+    font-size: 28px;
+    cursor: pointer;
+    color: var(--bege-escuro);
+  }
+
+  .close:hover {
+    color: #ff6b6b;
+  }
+
+  .estante {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .estante:hover {
+    opacity: 0.8;
+    stroke-width: 2;
+  }
+
+  .numero {
+    font-size: 14px;
+    font-weight: bold;
+  }
+</style>
