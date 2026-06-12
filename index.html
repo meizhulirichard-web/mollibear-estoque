@@ -129,20 +129,35 @@
     <main>
 
       <h2>🗺️ MAPA DA SALA G</h2>
+      <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
+        🚪 <strong>Porta</strong> está localizada à esquerda do mapa.
+      </p>
 
       <div class="mapa-container">
-        <svg id="mapa" viewBox="0 0 1250 800" class="mapa"></svg>
+        <svg id="mapa" viewBox="0 0 1200 800" class="mapa"></svg>
       </div>
 
       <div class="rodape">
         💡 Clique em uma estante para ver os produtos cadastrados! 🐻
       </div>
 
+      <!-- Modal para Produtos Cadastrados -->
       <div id="produtosCadastradosModal" class="modal" style="display: none;">
         <div class="modal-content">
           <span class="close">&times;</span>
           <h2>📋 Produtos Cadastrados</h2>
+          <input type="text" id="buscaProdutosModal" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo ou estante" style="margin-bottom: 15px;">
+          <button class="save button-fofo" id="buscarNoModalBtn" style="margin-bottom: 15px;">🔎 Buscar</button>
           <div id="listaProdutosCadastrados"></div>
+        </div>
+      </div>
+
+      <!-- Modal para Produtos por Estante -->
+      <div id="produtosEstanteModal" class="modal" style="display: none;">
+        <div class="modal-content">
+          <span class="close-estante">&times;</span>
+          <h2 id="tituloProdutosEstante">📦 Produtos na Estante</h2>
+          <div id="listaProdutosEstante"></div>
         </div>
       </div>
 
@@ -153,75 +168,80 @@
 </div>
 
 <script>
-// Dados das estantes
+// Dados das estantes (corrigido conforme a imagem)
 const estantes = [
-  // ESQUERDA
-  {n:1, x:10, y:610, w:55, h:90, c:"#f5e6d3"},
-  {n:2, x:10, y:510, w:55, h:90, c:"#f5e6d3"},
-  {n:3, x:10, y:410, w:55, h:90, c:"#f5e6d3"},
-  {n:4, x:10, y:310, w:55, h:90, c:"#f5e6d3"},
-  {n:5, x:10, y:210, w:55, h:90, c:"#f5e6d3"},
-  {n:6, x:10, y:110, w:55, h:90, c:"#f5e6d3"},
+  // PAREDE ESQUERDA (1-6) - PORTAS À ESQUERDA
+  {n:1, x:20, y:650, w:50, h:80, c:"#f5e6d3"},
+  {n:2, x:20, y:560, w:50, h:80, c:"#f5e6d3"},
+  {n:3, x:20, y:470, w:50, h:80, c:"#f5e6d3"},
+  {n:4, x:20, y:380, w:50, h:80, c:"#f5e6d3"},
+  {n:5, x:20, y:290, w:50, h:80, c:"#f5e6d3"},
+  {n:6, x:20, y:200, w:50, h:80, c:"#f5e6d3"},
 
-  // DIREITA
-  {n:7, x:1175, y:610, w:55, h:90, c:"#f5e6d3"},
-  {n:8, x:1175, y:510, w:55, h:90, c:"#f5e6d3"},
-  {n:9, x:1175, y:410, w:55, h:90, c:"#f5e6d3"},
-  {n:10, x:1175, y:310, w:55, h:90, c:"#f5e6d3"},
-  {n:11, x:1175, y:210, w:55, h:90, c:"#f5e6d3"},
-  {n:12, x:1175, y:110, w:55, h:90, c:"#f5e6d3"},
+  // PAREDE SUPERIOR (7-12)
+  {n:7, x:100, y:20, w:100, h:40, c:"#f5e6d3"},
+  {n:8, x:210, y:20, w:100, h:40, c:"#f5e6d3"},
+  {n:9, x:320, y:20, w:100, h:40, c:"#f5e6d3"},
+  {n:10, x:430, y:20, w:100, h:40, c:"#f5e6d3"},
+  {n:11, x:540, y:20, w:100, h:40, c:"#f5e6d3"},
+  {n:12, x:650, y:20, w:100, h:40, c:"#f5e6d3"},
 
-  // VERMELHAS
-  {n:13, x:320, y:610, w:140, h:45, c:"#f8c8c8"},
-  {n:14, x:460, y:610, w:140, h:45, c:"#f8c8c8"},
-  {n:15, x:600, y:610, w:140, h:45, c:"#f8c8c8"},
-  {n:16, x:740, y:610, w:140, h:45, c:"#f8c8c8"},
-  {n:17, x:880, y:610, w:140, h:45, c:"#f8c8c8"},
+  // PAREDE INFERIOR (17-21)
+  {n:17, x:850, y:700, w:100, h:40, c:"#d4e6f1"},
+  {n:18, x:740, y:700, w:100, h:40, c:"#d4e6f1"},
+  {n:19, x:630, y:700, w:100, h:40, c:"#d4e6f1"},
+  {n:20, x:520, y:700, w:100, h:40, c:"#d4e6f1"},
+  {n:21, x:410, y:700, w:100, h:40, c:"#d4e6f1"},
 
-  {n:18, x:320, y:565, w:140, h:45, c:"#f8c8c8"},
-  {n:19, x:460, y:565, w:140, h:45, c:"#f8c8c8"},
-  {n:20, x:600, y:565, w:140, h:45, c:"#f8c8c8"},
-  {n:21, x:740, y:565, w:140, h:45, c:"#f8c8c8"},
-  {n:22, x:880, y:565, w:140, h:45, c:"#f8c8c8"},
+  // PAREDE SUPERIOR (22-26)
+  {n:22, x:410, y:120, w:100, h:40, c:"#f8c8c8"},
+  {n:23, x:520, y:120, w:100, h:40, c:"#f8c8c8"},
+  {n:24, x:630, y:120, w:100, h:40, c:"#f8c8c8"},
+  {n:25, x:740, y:120, w:100, h:40, c:"#f8c8c8"},
+  {n:26, x:850, y:120, w:100, h:40, c:"#f8c8c8"},
 
-  {n:23, x:320, y:520, w:140, h:45, c:"#f8c8c8"},
-  {n:24, x:460, y:520, w:140, h:45, c:"#f8c8c8"},
-  {n:25, x:600, y:520, w:140, h:45, c:"#f8c8c8"},
-  {n:26, x:880, y:520, w:140, h:45, c:"#f8c8c8"},
+  // LINHA MEIO (27-31)
+  {n:27, x:410, y:170, w:100, h:40, c:"#f8c8c8"},
+  {n:28, x:520, y:170, w:100, h:40, c:"#f8c8c8"},
+  {n:29, x:630, y:170, w:100, h:40, c:"#f8c8c8"},
+  {n:30, x:740, y:170, w:100, h:40, c:"#f8c8c8"},
+  {n:31, x:850, y:170, w:100, h:40, c:"#f8c8c8"},
 
-  {n:27, x:320, y:475, w:140, h:45, c:"#f8c8c8"},
-  {n:28, x:460, y:475, w:140, h:45, c:"#f8c8c8"},
-  {n:29, x:600, y:475, w:140, h:45, c:"#f8c8c8"},
-  {n:30, x:740, y:475, w:140, h:45, c:"#f8c8c8"},
-  {n:31, x:880, y:475, w:140, h:45, c:"#f8c8c8"},
+  // LINHA MEIO (32-36)
+  {n:32, x:410, y:270, w:100, h:40, c:"#d4e6f1"},
+  {n:33, x:520, y:270, w:100, h:40, c:"#d4e6f1"},
+  {n:34, x:630, y:270, w:100, h:40, c:"#d4e6f1"},
+  {n:35, x:740, y:270, w:100, h:40, c:"#d4e6f1"},
+  {n:36, x:850, y:270, w:100, h:40, c:"#d4e6f1"},
 
-  // AZUIS
-  {n:37, x:260, y:320, w:60, h:100, c:"#d4e6f1"},
+  // LINHA MEIO (38-42)
+  {n:38, x:410, y:320, w:100, h:40, c:"#d4e6f1"},
+  {n:39, x:520, y:320, w:100, h:40, c:"#d4e6f1"},
+  {n:40, x:630, y:320, w:100, h:40, c:"#d4e6f1"},
+  {n:41, x:740, y:320, w:100, h:40, c:"#d4e6f1"},
+  {n:42, x:850, y:320, w:100, h:40, c:"#d4e6f1"},
 
-  {n:32, x:320, y:365, w:140, h:45, c:"#d4e6f1"},
-  {n:33, x:460, y:365, w:140, h:45, c:"#d4e6f1"},
-  {n:34, x:600, y:365, w:140, h:45, c:"#d4e6f1"},
-  {n:35, x:740, y:365, w:140, h:45, c:"#d4e6f1"},
-  {n:36, x:880, y:365, w:140, h:45, c:"#d4e6f1"},
+  // LINHA SUPERIOR (43-50)
+  {n:43, x:780, y:70, w:100, h:40, c:"#e6d4f1"},
+  {n:44, x:640, y:70, w:100, h:40, c:"#e6d4f1"},
+  {n:45, x:500, y:70, w:100, h:40, c:"#e6d4f1"},
+  {n:46, x:360, y:70, w:100, h:40, c:"#e6d4f1"},
+  {n:47, x:360, y:120, w:100, h:40, c:"#e6d4f1"},
+  {n:48, x:500, y:120, w:100, h:40, c:"#e6d4f1"},
+  {n:49, x:640, y:120, w:100, h:40, c:"#e6d4f1"},
+  {n:50, x:780, y:120, w:100, h:40, c:"#e6d4f1"},
 
-  {n:38, x:320, y:320, w:140, h:45, c:"#d4e6f1"},
-  {n:39, x:460, y:320, w:140, h:45, c:"#d4e6f1"},
-  {n:40, x:600, y:320, w:140, h:45, c:"#d4e6f1"},
-  {n:41, x:740, y:320, w:140, h:45, c:"#d4e6f1"},
-  {n:42, x:880, y:320, w:140, h:45, c:"#d4e6f1"},
+  // PAREDE DIREITA (13-16)
+  {n:13, x:1120, y:600, w:40, h:100, c:"#d4e6f1"},
+  {n:14, x:1120, y:490, w:40, h:100, c:"#d4e6f1"},
+  {n:15, x:1120, y:380, w:40, h:100, c:"#d4e6f1"},
+  {n:16, x:1120, y:270, w:40, h:100, c:"#d4e6f1"},
 
-  // ROXAS
-  {n:46, x:360, y:180, w:140, h:45, c:"#e6d4f1"},
-  {n:45, x:500, y:180, w:140, h:45, c:"#e6d4f1"},
-  {n:44, x:640, y:180, w:140, h:45, c:"#e6d4f1"},
-  {n:43, x:780, y:180, w:140, h:45, c:"#e6d4f1"},
+  // ESTANTE 37
+  {n:37, x:320, y:220, w:40, h:100, c:"#d4e6f1"},
 
-  {n:47, x:360, y:135, w:140, h:45, c:"#e6d4f1"},
-  {n:48, x:500, y:135, w:140, h:45, c:"#e6d4f1"},
-  {n:49, x:640, y:135, w:140, h:45, c:"#e6d4f1"},
-  {n:50, x:780, y:135, w:140, h:45, c:"#e6d4f1"},
-
-  {n:51, x:920, y:170, w:55, h:100, c:"#e6d4f1"}
+  // ESTANTE 51
+  {n:51, x:960, y:70, w:40, h:100, c:"#e6d4f1"}
 ];
 
 // Função para preencher o select de estantes
@@ -235,38 +255,91 @@ function preencherSelectEstantes() {
   });
 }
 
-// Função para exibir os produtos de uma estante
+// Função para verificar se o nível da estante já tem um produto
+async function verificarNivelOcupado(estante, nivel) {
+  const produtos = await window.carregarProdutos();
+  return produtos.some(produto => produto.estante == estante && produto.nivel === nivel);
+}
+
+// Função para exibir os produtos de uma estante em um modal
 async function exibirProdutosEstante(estanteNumero) {
   const produtos = await window.carregarProdutos();
   const produtosEstante = produtos.filter(produto => produto.estante == estanteNumero);
+  const modal = document.getElementById('produtosEstanteModal');
+  const listaProdutos = document.getElementById('listaProdutosEstante');
+  const titulo = document.getElementById('tituloProdutosEstante');
   
-  if (produtosEstante.length === 0) {
-    alert(`🐻 Estante ${estanteNumero} não possui produtos cadastrados!`);
-  } else {
-    let mensagem = `📦 Produtos na Estante ${estanteNumero}:\n\n`;
-    produtosEstante.forEach(produto => {
-      mensagem += `Código: ${produto.codigo}\nDescrição: ${produto.descricao}\nCor: ${produto.cor}\nModelo: ${produto.modelo}\nQuantidade: ${produto.quantidade}\nNível: ${produto.nivel}\n\n`;
-    });
-    alert(mensagem);
-  }
-}
-
-// Função para exibir todos os produtos cadastrados
-async function exibirProdutosCadastrados() {
-  const produtos = await window.carregarProdutos();
-  const listaProdutos = document.getElementById('listaProdutosCadastrados');
-  const modal = document.getElementById('produtosCadastradosModal');
-  
+  titulo.textContent = `📦 Produtos na Estante ${estanteNumero}`;
   listaProdutos.innerHTML = '';
   
-  if (produtos.length === 0) {
-    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado ainda!</p>';
+  if (produtosEstante.length === 0) {
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado nesta estante!</p>';
   } else {
     const ul = document.createElement('ul');
     ul.style.listStyle = 'none';
     ul.style.padding = '0';
     
-    produtos.forEach((produto, index) => {
+    produtosEstante.forEach((produto) => {
+      const li = document.createElement('li');
+      li.style.marginBottom = '15px';
+      li.style.padding = '12px';
+      li.style.border = '2px solid #f5e6d3';
+      li.style.borderRadius = '8px';
+      li.style.backgroundColor = '#fffaf0';
+      li.style.display = 'flex';
+      li.style.flexDirection = 'column';
+      
+      const infoProduto = document.createElement('div');
+      infoProduto.style.flex = '1';
+      infoProduto.style.width = '100%';
+      infoProduto.innerHTML = `
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Nível:</strong> ${produto.nivel}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+      `;
+      
+      li.appendChild(infoProduto);
+      ul.appendChild(li);
+    });
+    
+    listaProdutos.appendChild(ul);
+  }
+  
+  modal.style.display = 'block';
+}
+
+// Função para fechar o modal de estante
+function fecharModalEstante() {
+  document.getElementById('produtosEstanteModal').style.display = 'none';
+}
+
+// Função para filtrar produtos no modal
+async function filtrarProdutosModal() {
+  const busca = document.getElementById('buscaProdutosModal').value.toLowerCase();
+  const produtos = await window.carregarProdutos();
+  const listaProdutos = document.getElementById('listaProdutosCadastrados');
+  
+  const produtosFiltrados = produtos.filter(produto => 
+    produto.codigo.toLowerCase().includes(busca) || 
+    produto.descricao.toLowerCase().includes(busca) || 
+    produto.cor.toLowerCase().includes(busca) ||
+    produto.modelo.toLowerCase().includes(busca) ||
+    produto.estante.toString().includes(busca)
+  );
+  
+  listaProdutos.innerHTML = '';
+  
+  if (produtosFiltrados.length === 0) {
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto encontrado!</p>';
+  } else {
+    const ul = document.createElement('ul');
+    ul.style.listStyle = 'none';
+    ul.style.padding = '0';
+    
+    produtosFiltrados.forEach((produto, index) => {
       const li = document.createElement('li');
       li.style.marginBottom = '15px';
       li.style.padding = '12px';
@@ -308,9 +381,13 @@ async function exibirProdutosCadastrados() {
       botaoAtualizar.onclick = async () => {
         const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
         if (novaQuantidade && !isNaN(novaQuantidade)) {
-          produtos[index].quantidade = novaQuantidade;
-          await window.salvarProdutos(produtos);
-          alert('✅ Quantidade atualizada com sucesso!');
+          const produtos = await window.carregarProdutos();
+          const produtoIndex = produtos.findIndex(p => p.codigo === produto.codigo && p.cor === produto.cor && p.modelo === produto.modelo);
+          if (produtoIndex !== -1) {
+            produtos[produtoIndex].quantidade = novaQuantidade;
+            await window.salvarProdutos(produtos);
+            alert('✅ Quantidade atualizada com sucesso!');
+          }
         } else {
           alert('❌ Insira uma quantidade válida!');
         }
@@ -327,7 +404,7 @@ async function exibirProdutosCadastrados() {
       botaoRemover.style.fontSize = '16px';
       botaoRemover.onclick = async () => {
         if (confirm('🐻 Tem certeza que deseja remover este produto?')) {
-          await removerProduto(index);
+          await removerProduto(produto.codigo, produto.cor, produto.modelo);
         }
       };
       
@@ -341,17 +418,25 @@ async function exibirProdutosCadastrados() {
     
     listaProdutos.appendChild(ul);
   }
-  
+}
+
+// Função para exibir todos os produtos cadastrados
+async function exibirProdutosCadastrados() {
+  const modal = document.getElementById('produtosCadastradosModal');
   modal.style.display = 'block';
+  await filtrarProdutosModal();
 }
 
 // Função para remover um produto
-async function removerProduto(index) {
+async function removerProduto(codigo, cor, modelo) {
   const produtos = await window.carregarProdutos();
-  produtos.splice(index, 1);
-  await window.salvarProdutos(produtos);
-  await exibirProdutosCadastrados();
-  alert('🗑️ Produto removido com sucesso!');
+  const index = produtos.findIndex(produto => produto.codigo === codigo && produto.cor === cor && produto.modelo === modelo);
+  if (index !== -1) {
+    produtos.splice(index, 1);
+    await window.salvarProdutos(produtos);
+    await filtrarProdutosModal();
+    alert('🗑️ Produto removido com sucesso!');
+  }
 }
 
 // Função para fechar o modal
@@ -387,6 +472,15 @@ async function salvarProduto() {
   if (produtoJaExiste) {
     erroCadastro.textContent = '❌ Este produto (código + cor + modelo) já está cadastrado!';
     return;
+  }
+  
+  // Verifica se o nível da estante já está ocupado
+  const nivelOcupado = await verificarNivelOcupado(estante, nivel);
+  if (nivelOcupado) {
+    const confirmar = confirm(`⚠️ Já existe um produto cadastrado no nível ${nivel} da estante ${estante}. Deseja cadastrar mesmo assim?`);
+    if (!confirmar) {
+      return;
+    }
   }
   
   const novoProduto = { codigo, descricao, cor, modelo, quantidade, estante, nivel };
@@ -442,6 +536,30 @@ async function buscarProduto() {
 const svg = document.querySelector(".mapa");
 const NS = "http://www.w3.org/2000/svg";
 
+// Adicionar retângulo para indicar a porta
+const porta = document.createElementNS(NS, "rect");
+porta.setAttribute("x", 10);
+porta.setAttribute("y", 700);
+porta.setAttribute("width", 30);
+porta.setAttribute("height", 60);
+porta.setAttribute("fill", "#8b4513");
+porta.setAttribute("stroke", "#000");
+porta.setAttribute("stroke-width", "2");
+svg.appendChild(porta);
+
+// Adicionar texto "PORTAS" ao lado da porta
+const textoPorta = document.createElementNS(NS, "text");
+textoPorta.setAttribute("x", 25);
+textoPorta.setAttribute("y", 730);
+textoPorta.setAttribute("text-anchor", "middle");
+textoPorta.setAttribute("fill", "#fff");
+textoPorta.setAttribute("font-size", "12");
+textoPorta.setAttribute("font-weight", "bold");
+textoPorta.setAttribute("transform", "rotate(-90, 25, 730)");
+textoPorta.textContent = "PORTAS";
+svg.appendChild(textoPorta);
+
+// Adicionar estantes ao SVG
 estantes.forEach(estante => {
   const rect = document.createElementNS(NS, "rect");
   rect.setAttribute("x", estante.x);
@@ -479,6 +597,8 @@ document.getElementById('salvarProdutoBtn').addEventListener('click', salvarProd
 document.getElementById('localizarProdutoBtn').addEventListener('click', buscarProduto);
 document.getElementById('produtosCadastradosBtn').addEventListener('click', exibirProdutosCadastrados);
 document.querySelector('.close').addEventListener('click', fecharModal);
+document.getElementById('buscarNoModalBtn').addEventListener('click', filtrarProdutosModal);
+document.querySelector('.close-estante').addEventListener('click', fecharModalEstante);
 
 // Inicializar o select de estantes
 preencherSelectEstantes();
@@ -638,7 +758,7 @@ preencherSelectEstantes();
   .mapa {
     width: 100%;
     height: auto;
-    min-width: 600px;
+    min-width: 800px;
     display: block;
   }
 
@@ -681,7 +801,7 @@ preencherSelectEstantes();
     max-height: 80%;
     overflow: auto;
     border: 2px solid var(--bege-claro);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   }
 
   .modal-content h2 {
@@ -691,14 +811,14 @@ preencherSelectEstantes();
     font-size: 22px;
   }
 
-  .close {
+  .close, .close-estante {
     float: right;
     font-size: 28px;
     cursor: pointer;
     color: var(--bege-escuro);
   }
 
-  .close:hover {
+  .close:hover, .close-estante:hover {
     color: #ff6b6b;
   }
 
