@@ -236,15 +236,15 @@ function fecharModalLogin() {
   document.getElementById('loginModal').style.display = 'none';
 }
 
-// Dados das estantes (corrigido conforme as especificações)
+// Dados das estantes (ajustado conforme solicitado)
 const estantes = [
-  // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos
-  {n:1, x:20, y:650, w:50, h:80, c:"#f5e6d3"},
-  {n:2, x:20, y:560, w:50, h:80, c:"#f5e6d3"},
-  {n:3, x:20, y:470, w:50, h:80, c:"#f5e6d3"},
-  {n:4, x:20, y:380, w:50, h:80, c:"#f5e6d3"},
-  {n:5, x:20, y:290, w:50, h:80, c:"#f5e6d3"},
-  {n:6, x:20, y:200, w:50, h:80, c:"#f5e6d3"},
+  // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos (y ajustado para subir)
+  {n:1, x:20, y:600, w:50, h:80, c:"#f5e6d3"},
+  {n:2, x:20, y:510, w:50, h:80, c:"#f5e6d3"},
+  {n:3, x:20, y:420, w:50, h:80, c:"#f5e6d3"},
+  {n:4, x:20, y:330, w:50, h:80, c:"#f5e6d3"},
+  {n:5, x:20, y:240, w:50, h:80, c:"#f5e6d3"},
+  {n:6, x:20, y:150, w:50, h:80, c:"#f5e6d3"},
 
   // PARTE SUPERIOR ESQUERDA (7-8)
   {n:7, x:100, y:20, w:100, h:40, c:"#f5e6d3"},
@@ -256,11 +256,11 @@ const estantes = [
   {n:11, x:920, y:20, w:100, h:40, c:"#f5e6d3"},
   {n:12, x:1030, y:20, w:100, h:40, c:"#f5e6d3"},
 
-  // LADO DIREITO DA LOJA (13-16): dos fundos para a frente
-  {n:13, x:1120, y:650, w:50, h:80, c:"#f5e6d3"},
-  {n:14, x:1120, y:560, w:50, h:80, c:"#f5e6d3"},
-  {n:15, x:1120, y:470, w:50, h:80, c:"#f5e6d3"},
-  {n:16, x:1120, y:380, w:50, h:80, c:"#f5e6d3"},
+  // LADO DIREITO DA LOJA (13-16): dos fundos para a frente (y ajustado para subir e espaço entre 15 e 16)
+  {n:13, x:1120, y:600, w:50, h:80, c:"#f5e6d3"},
+  {n:14, x:1120, y:510, w:50, h:80, c:"#f5e6d3"},
+  {n:15, x:1120, y:420, w:50, h:80, c:"#f5e6d3"},
+  {n:16, x:1120, y:300, w:50, h:80, c:"#f5e6d3"}, // Espaço entre 15 e 16
 
   // PARTE INFERIOR (17-21): da direita para a esquerda
   {n:17, x:1030, y:700, w:100, h:40, c:"#d4e6f1"},
