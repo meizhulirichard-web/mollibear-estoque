@@ -63,12 +63,14 @@
     <div class="actions">
       <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
       <button class="button-fofo">❓ Sobre</button>
+      <button id="loginBtn" class="button-fofo" style="display: none;">🔑 Login</button>
+      <button id="logoutBtn" class="button-fofo" style="display: none;">🚪 Sair</button>
     </div>
   </header>
 
   <div class="content">
 
-    <aside>
+    <aside id="asideCadastro">
 
       <div class="card">
         <h2>📦 CADASTRO DE PRODUTO</h2>
@@ -165,6 +167,18 @@
         </div>
       </div>
 
+      <!-- Modal de Login -->
+      <div id="loginModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+          <span class="close-login">&times;</span>
+          <h2>🔑 Login de Administrador</h2>
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Senha:</label>
+          <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite a senha" style="margin-top: 6px;">
+          <button class="button-fofo" id="entrarBtn" style="margin-top: 20px; width: 100%;">🔓 Entrar</button>
+          <p id="erroLogin" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
+        </div>
+      </div>
+
     </main>
 
   </div>
@@ -172,6 +186,56 @@
 </div>
 
 <script>
+// Senha de administrador (você pode alterar aqui)
+const SENHA_ADMIN = "mollibear123";
+
+// Variável global para armazenar os produtos selecionados
+let produtosSelecionados = [];
+
+// Função para verificar se o usuário está logado
+function estaLogado() {
+  return localStorage.getItem('mollibear_logado') === 'true';
+}
+
+// Função para fazer login
+function fazerLogin() {
+  const senha = document.getElementById('senhaInput').value;
+  const erroLogin = document.getElementById('erroLogin');
+  
+  if (senha === SENHA_ADMIN) {
+    localStorage.setItem('mollibear_logado', 'true');
+    document.getElementById('loginModal').style.display = 'none';
+    document.getElementById('loginBtn').style.display = 'none';
+    document.getElementById('logoutBtn').style.display = 'block';
+    document.getElementById('asideCadastro').style.display = 'flex';
+    erroLogin.textContent = '';
+    alert('✅ Login realizado com sucesso!');
+  } else {
+    erroLogin.textContent = '❌ Senha incorreta!';
+  }
+}
+
+// Função para fazer logout
+function fazerLogout() {
+  localStorage.removeItem('mollibear_logado');
+  document.getElementById('loginBtn').style.display = 'block';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('asideCadastro').style.display = 'none';
+  alert('🚪 Você saiu do modo administrador.');
+}
+
+// Função para abrir o modal de login
+function abrirModalLogin() {
+  document.getElementById('loginModal').style.display = 'block';
+  document.getElementById('senhaInput').value = '';
+  document.getElementById('erroLogin').textContent = '';
+}
+
+// Função para fechar o modal de login
+function fecharModalLogin() {
+  document.getElementById('loginModal').style.display = 'none';
+}
+
 // Dados das estantes (corrigido conforme as especificações)
 const estantes = [
   // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos
@@ -249,9 +313,6 @@ const estantes = [
   // Lateral: 51
   {n:51, x:960, y:200, w:40, h:100, c:"#e6d4f1"}
 ];
-
-// Variável global para armazenar os produtos selecionados
-let produtosSelecionados = [];
 
 // Função para preencher o select de estantes
 function preencherSelectEstantes() {
@@ -407,6 +468,10 @@ async function filtrarProdutosModal() {
       botaoAtualizar.style.cursor = 'pointer';
       botaoAtualizar.style.fontSize = '16px';
       botaoAtualizar.onclick = async () => {
+        if (!estaLogado()) {
+          alert('❌ Você não tem permissão para atualizar produtos!');
+          return;
+        }
         const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
         if (novaQuantidade && !isNaN(novaQuantidade)) {
           const produtos = await window.carregarProdutos();
@@ -434,6 +499,11 @@ async function filtrarProdutosModal() {
 
 // Função para selecionar todos os produtos
 async function selecionarTodos() {
+  if (!estaLogado()) {
+    alert('❌ Você não tem permissão para selecionar produtos!');
+    return;
+  }
+  
   const produtos = await window.carregarProdutos();
   const busca = document.getElementById('buscaProdutosModal').value.toLowerCase();
   const produtosFiltrados = produtos.filter(produto => 
@@ -457,6 +527,11 @@ async function selecionarTodos() {
 
 // Função para excluir produtos selecionados
 async function excluirSelecionados() {
+  if (!estaLogado()) {
+    alert('❌ Você não tem permissão para excluir produtos!');
+    return;
+  }
+  
   if (produtosSelecionados.length === 0) {
     alert('❌ Nenhum produto selecionado!');
     return;
@@ -495,6 +570,11 @@ function fecharModal() {
 
 // Função para salvar um novo produto
 async function salvarProduto() {
+  if (!estaLogado()) {
+    alert('❌ Você não tem permissão para cadastrar produtos!');
+    return;
+  }
+  
   const codigo = document.getElementById('codigoProduto').value.trim();
   const descricao = document.getElementById('descricaoProduto').value.trim();
   const cor = document.getElementById('corProduto').value.trim();
@@ -650,9 +730,24 @@ document.getElementById('buscarNoModalBtn').addEventListener('click', filtrarPro
 document.querySelector('.close-estante').addEventListener('click', fecharModalEstante);
 document.getElementById('selecionarTodosBtn').addEventListener('click', selecionarTodos);
 document.getElementById('excluirSelecionadosBtn').addEventListener('click', excluirSelecionados);
+document.getElementById('loginBtn').addEventListener('click', abrirModalLogin);
+document.getElementById('logoutBtn').addEventListener('click', fazerLogout);
+document.getElementById('entrarBtn').addEventListener('click', fazerLogin);
+document.querySelector('.close-login').addEventListener('click', fecharModalLogin);
 
 // Inicializar o select de estantes
 preencherSelectEstantes();
+
+// Verificar se o usuário já está logado ao carregar a página
+if (estaLogado()) {
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = 'block';
+  document.getElementById('asideCadastro').style.display = 'flex';
+} else {
+  document.getElementById('loginBtn').style.display = 'block';
+  document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('asideCadastro').style.display = 'none';
+}
 </script>
 
 <style>
@@ -862,14 +957,14 @@ preencherSelectEstantes();
     font-size: 22px;
   }
 
-  .close, .close-estante {
+  .close, .close-estante, .close-login {
     float: right;
     font-size: 28px;
     cursor: pointer;
     color: var(--bege-escuro);
   }
 
-  .close:hover, .close-estante:hover {
+  .close:hover, .close-estante:hover, .close-login:hover {
     color: #ff6b6b;
   }
 
