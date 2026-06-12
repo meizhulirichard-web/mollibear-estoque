@@ -25,10 +25,10 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Função para carregar os produtos do Firestore
-    async function carregarProdutos() {
+    // Função para carregar os produtos do Firestore (por tipo)
+    async function carregarProdutos(tipo) {
       try {
-        const docRef = doc(db, "estoque", "produtos");
+        const docRef = doc(db, "estoque", `produtos_${tipo}`);
         const docSnap = await getDoc(docRef);
         return docSnap.exists() ? docSnap.data().produtos || [] : [];
       } catch (error) {
@@ -37,10 +37,10 @@
       }
     }
 
-    // Função para salvar os produtos no Firestore
-    async function salvarProdutos(produtos) {
+    // Função para salvar os produtos no Firestore (por tipo)
+    async function salvarProdutos(produtos, tipo) {
       try {
-        await setDoc(doc(db, "estoque", "produtos"), { produtos });
+        await setDoc(doc(db, "estoque", `produtos_${tipo}`), { produtos });
       } catch (error) {
         console.error("Erro ao salvar produtos:", error);
       }
@@ -61,6 +61,12 @@
     </div>
 
     <div class="actions">
+      <select id="modoSelect" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513; margin-right: 10px;">
+        <option value="sala_g">🗺️ Sala G (com mapa)</option>
+        <option value="estoque_g">📦 Estoque G</option>
+        <option value="estoque_p">📦 Estoque P</option>
+        <option value="estoque_m">📦 Estoque M</option>
+      </select>
       <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
       <button class="button-fofo">❓ Sobre</button>
       <button id="loginBtn" class="button-fofo" style="display: none;">🔑 Login</button>
@@ -90,7 +96,7 @@
         <label>Quantidade</label>
         <input type="number" id="quantidadeProduto" class="input-fofo">
 
-        <div class="row">
+        <div class="row" id="estanteNivelRow">
           <div>
             <label>Estante</label>
             <select id="estanteSelect" class="input-fofo"></select>
@@ -129,25 +135,39 @@
     </aside>
 
     <main>
+      <!-- Conteúdo dinâmico: Mapa (Sala G) ou Lista (Estoque G, P, M) -->
+      <div id="conteudoDinamico">
+        <!-- Mapa da Sala G (exibido por padrão) -->
+        <div id="mapaContainer" style="display: block;">
+          <h2>🗺️ MAPA DA SALA G</h2>
+          <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
+            🚪 <strong>Porta</strong> está localizada à esquerda da loja.
+          </p>
+          <div class="mapa-container">
+            <svg id="mapa" viewBox="0 0 1200 800" class="mapa"></svg>
+          </div>
+          <div class="rodape">
+            💡 Clique em uma estante para ver os produtos cadastrados! 🐻
+          </div>
+        </div>
 
-      <h2>🗺️ MAPA DA SALA G</h2>
-      <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
-        🚪 <strong>Porta</strong> está localizada à esquerda da loja.
-      </p>
-
-      <div class="mapa-container">
-        <svg id="mapa" viewBox="0 0 1200 800" class="mapa"></svg>
-      </div>
-
-      <div class="rodape">
-        💡 Clique em uma estante para ver os produtos cadastrados! 🐻
+        <!-- Lista do Estoque (oculto por padrão) -->
+        <div id="estoqueContainer" style="display: none;">
+          <h2 id="estoqueTitulo">📦 Estoque</h2>
+          <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
+            📋 Lista de todos os produtos em estoque.
+          </p>
+          <div class="estoque-list-container">
+            <div id="listaEstoque"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Modal para Produtos Cadastrados -->
       <div id="produtosCadastradosModal" class="modal" style="display: none;">
         <div class="modal-content">
           <span class="close">&times;</span>
-          <h2>📋 Produtos Cadastrados</h2>
+          <h2 id="tituloModalProdutos">📋 Produtos Cadastrados</h2>
           <div style="display: flex; gap: 10px; margin-bottom: 15px;">
             <input type="text" id="buscaProdutosModal" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo ou estante" style="flex: 1;">
             <button class="button-fofo" id="buscarNoModalBtn" style="padding: 10px 15px;">🔎 Buscar</button>
@@ -158,7 +178,7 @@
         </div>
       </div>
 
-      <!-- Modal para Produtos por Estante -->
+      <!-- Modal para Produtos por Estante (apenas para Sala G) -->
       <div id="produtosEstanteModal" class="modal" style="display: none;">
         <div class="modal-content">
           <span class="close-estante">&times;</span>
@@ -191,6 +211,8 @@ const SENHA_ADMIN = "mollibear123";
 
 // Variável global para armazenar os produtos selecionados
 let produtosSelecionados = [];
+// Variável global para o modo atual
+let modoAtual = 'sala_g';
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -236,7 +258,7 @@ function fecharModalLogin() {
   document.getElementById('loginModal').style.display = 'none';
 }
 
-// Dados das estantes (ajustado conforme solicitado: estantes 13-16 espelhadas)
+// Dados das estantes (apenas para Sala G)
 const estantes = [
   // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos
   {n:1, x:20, y:600, w:50, h:80, c:"#f5e6d3"},
@@ -257,10 +279,10 @@ const estantes = [
   {n:12, x:1030, y:20, w:100, h:40, c:"#f5e6d3"},
 
   // LADO DIREITO DA LOJA (13-16): espelhadas de cima para baixo
-  {n:16, x:1120, y:600, w:50, h:80, c:"#f5e6d3"}, // Estante 16 no lugar da 13
-  {n:15, x:1120, y:445, w:50, h:80, c:"#f5e6d3"}, // Estante 15 no lugar da 14
-  {n:14, x:1120, y:365, w:50, h:80, c:"#f5e6d3"}, // Estante 14 no lugar da 15
-  {n:13, x:1120, y:285, w:50, h:80, c:"#f5e6d3"}, // Estante 13 no lugar da 16
+  {n:16, x:1120, y:600, w:50, h:80, c:"#f5e6d3"},
+  {n:15, x:1120, y:445, w:50, h:80, c:"#f5e6d3"},
+  {n:14, x:1120, y:365, w:50, h:80, c:"#f5e6d3"},
+  {n:13, x:1120, y:285, w:50, h:80, c:"#f5e6d3"},
 
   // PARTE INFERIOR (17-21): da direita para a esquerda
   {n:17, x:1030, y:700, w:100, h:40, c:"#d4e6f1"},
@@ -270,13 +292,11 @@ const estantes = [
   {n:21, x:590, y:700, w:100, h:40, c:"#d4e6f1"},
 
   // ILHA CENTRAL INFERIOR (22-31)
-  // Frente: 22, 23, 24, 25, 26
   {n:22, x:410, y:550, w:100, h:40, c:"#f8c8c8"},
   {n:23, x:520, y:550, w:100, h:40, c:"#f8c8c8"},
   {n:24, x:630, y:550, w:100, h:40, c:"#f8c8c8"},
   {n:25, x:740, y:550, w:100, h:40, c:"#f8c8c8"},
   {n:26, x:850, y:550, w:100, h:40, c:"#f8c8c8"},
-  // Verso: 27, 28, 29, 30, 31
   {n:27, x:410, y:600, w:100, h:40, c:"#f8c8c8"},
   {n:28, x:520, y:600, w:100, h:40, c:"#f8c8c8"},
   {n:29, x:630, y:600, w:100, h:40, c:"#f8c8c8"},
@@ -284,15 +304,12 @@ const estantes = [
   {n:31, x:850, y:600, w:100, h:40, c:"#f8c8c8"},
 
   // ILHA CENTRAL INTERMEDIÁRIA (32-42)
-  // Frente: 32, 33, 34, 35, 36
   {n:32, x:410, y:400, w:100, h:40, c:"#d4e6f1"},
   {n:33, x:520, y:400, w:100, h:40, c:"#d4e6f1"},
   {n:34, x:630, y:400, w:100, h:40, c:"#d4e6f1"},
   {n:35, x:740, y:400, w:100, h:40, c:"#d4e6f1"},
   {n:36, x:850, y:400, w:100, h:40, c:"#d4e6f1"},
-  // Lateral: 37
   {n:37, x:320, y:400, w:40, h:100, c:"#d4e6f1"},
-  // Verso: 38, 39, 40, 41, 42
   {n:38, x:410, y:450, w:100, h:40, c:"#d4e6f1"},
   {n:39, x:520, y:450, w:100, h:40, c:"#d4e6f1"},
   {n:40, x:630, y:450, w:100, h:40, c:"#d4e6f1"},
@@ -300,46 +317,131 @@ const estantes = [
   {n:42, x:850, y:450, w:100, h:40, c:"#d4e6f1"},
 
   // ILHA CENTRAL SUPERIOR (43-51)
-  // Frente: 43, 44, 45, 46
   {n:43, x:500, y:200, w:100, h:40, c:"#e6d4f1"},
   {n:44, x:610, y:200, w:100, h:40, c:"#e6d4f1"},
   {n:45, x:720, y:200, w:100, h:40, c:"#e6d4f1"},
   {n:46, x:830, y:200, w:100, h:40, c:"#e6d4f1"},
-  // Verso: 47, 48, 49, 50
   {n:47, x:500, y:250, w:100, h:40, c:"#e6d4f1"},
   {n:48, x:610, y:250, w:100, h:40, c:"#e6d4f1"},
   {n:49, x:720, y:250, w:100, h:40, c:"#e6d4f1"},
   {n:50, x:830, y:250, w:100, h:40, c:"#e6d4f1"},
-  // Lateral: 51
   {n:51, x:960, y:200, w:40, h:100, c:"#e6d4f1"}
 ];
 
 // Função para preencher o select de estantes
 function preencherSelectEstantes() {
   const estanteSelect = document.getElementById('estanteSelect');
-  estantes.forEach(estante => {
-    const option = document.createElement('option');
-    option.value = estante.n;
-    option.textContent = `Estante ${estante.n}`;
-    estanteSelect.appendChild(option);
-  });
+  estanteSelect.innerHTML = ''; // Limpar opções anteriores
+  
+  // Se for Sala G, preencher com as estantes
+  if (modoAtual === 'sala_g') {
+    estantes.forEach(estante => {
+      const option = document.createElement('option');
+      option.value = estante.n;
+      option.textContent = `Estante ${estante.n}`;
+      estanteSelect.appendChild(option);
+    });
+    document.getElementById('estanteNivelRow').style.display = 'flex';
+  } else {
+    // Para estoques, não precisamos de estante e nível
+    document.getElementById('estanteNivelRow').style.display = 'none';
+  }
+}
+
+// Função para trocar entre Sala G e Estoques
+async function trocarModo() {
+  modoAtual = document.getElementById('modoSelect').value;
+  
+  if (modoAtual === 'sala_g') {
+    document.getElementById('mapaContainer').style.display = 'block';
+    document.getElementById('estoqueContainer').style.display = 'none';
+    document.getElementById('tituloModalProdutos').textContent = '📋 Produtos Cadastrados (Sala G)';
+    document.getElementById('estoqueTitulo').textContent = '🗺️ MAPA DA SALA G';
+  } else {
+    document.getElementById('mapaContainer').style.display = 'none';
+    document.getElementById('estoqueContainer').style.display = 'block';
+    
+    // Atualizar título do modal e da página de estoque
+    const nomesEstoque = {
+      estoque_g: 'Estoque G',
+      estoque_p: 'Estoque P',
+      estoque_m: 'Estoque M'
+    };
+    document.getElementById('tituloModalProdutos').textContent = `📋 Produtos Cadastrados (${nomesEstoque[modoAtual] || 'Estoque'})`;
+    document.getElementById('estoqueTitulo').textContent = `📦 ${nomesEstoque[modoAtual] || 'Estoque'}`;
+    
+    await exibirListaEstoque(); // Exibir lista de produtos do estoque selecionado
+  }
+  
+  preencherSelectEstantes(); // Atualizar o select de estantes
+  
+  // Recarregar os produtos no modal se estiver aberto
+  if (document.getElementById('produtosCadastradosModal').style.display === 'block') {
+    await filtrarProdutosModal();
+  }
+}
+
+// Função para exibir a lista de produtos do Estoque
+async function exibirListaEstoque() {
+  const produtos = await window.carregarProdutos(modoAtual);
+  const listaEstoque = document.getElementById('listaEstoque');
+  
+  listaEstoque.innerHTML = '';
+  
+  if (produtos.length === 0) {
+    listaEstoque.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado!</p>';
+  } else {
+    const ul = document.createElement('ul');
+    ul.style.listStyle = 'none';
+    ul.style.padding = '0';
+    
+    produtos.forEach((produto, index) => {
+      const li = document.createElement('li');
+      li.style.marginBottom = '15px';
+      li.style.padding = '12px';
+      li.style.border = '2px solid #f5e6d3';
+      li.style.borderRadius = '8px';
+      li.style.backgroundColor = '#fffaf0';
+      li.style.display = 'flex';
+      li.style.justifyContent = 'space-between';
+      li.style.alignItems = 'center';
+      li.style.flexDirection = 'column';
+      
+      const infoProduto = document.createElement('div');
+      infoProduto.style.flex = '1';
+      infoProduto.style.width = '100%';
+      infoProduto.innerHTML = `
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+        ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
+      `;
+      
+      li.appendChild(infoProduto);
+      ul.appendChild(li);
+    });
+    
+    listaEstoque.appendChild(ul);
+  }
 }
 
 // Função para verificar se o nível da estante já tem um produto
 async function verificarNivelOcupado(estante, nivel) {
-  const produtos = await window.carregarProdutos();
+  const produtos = await window.carregarProdutos(modoAtual);
   return produtos.some(produto => produto.estante == estante && produto.nivel === nivel);
 }
 
 // Função para exibir os produtos de uma estante em um modal
 async function exibirProdutosEstante(estanteNumero) {
-  const produtos = await window.carregarProdutos();
+  const produtos = await window.carregarProdutos(modoAtual);
   const produtosEstante = produtos.filter(produto => produto.estante == estanteNumero);
   const modal = document.getElementById('produtosEstanteModal');
   const listaProdutos = document.getElementById('listaProdutosEstante');
   const titulo = document.getElementById('tituloProdutosEstante');
   
-  titulo.textContent = `📦 Produtos na Estante ${estanteNumero}`;
+  titulo.textContent = `📦 Produtos na Estante ${estanteNumero} (Sala G)`;
   listaProdutos.innerHTML = '';
   
   if (produtosEstante.length === 0) {
@@ -389,7 +491,7 @@ function fecharModalEstante() {
 // Função para filtrar produtos no modal
 async function filtrarProdutosModal() {
   const busca = document.getElementById('buscaProdutosModal').value.toLowerCase();
-  const produtos = await window.carregarProdutos();
+  const produtos = await window.carregarProdutos(modoAtual);
   const listaProdutos = document.getElementById('listaProdutosCadastrados');
   
   const produtosFiltrados = produtos.filter(produto => 
@@ -397,7 +499,7 @@ async function filtrarProdutosModal() {
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    produto.estante.toString().includes(busca)
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
   );
   
   listaProdutos.innerHTML = '';
@@ -430,7 +532,7 @@ async function filtrarProdutosModal() {
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
-        <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
+        ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 80px; padding: 6px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center; font-size: 16px;"></p>
       `;
       
@@ -474,11 +576,11 @@ async function filtrarProdutosModal() {
         }
         const novaQuantidade = document.getElementById(`quantidade-${index}`).value;
         if (novaQuantidade && !isNaN(novaQuantidade)) {
-          const produtos = await window.carregarProdutos();
+          const produtos = await window.carregarProdutos(modoAtual);
           const produtoIndex = produtos.findIndex(p => p.codigo === produto.codigo && p.cor === produto.cor && p.modelo === produto.modelo);
           if (produtoIndex !== -1) {
             produtos[produtoIndex].quantidade = novaQuantidade;
-            await window.salvarProdutos(produtos);
+            await window.salvarProdutos(produtos, modoAtual);
             alert('✅ Quantidade atualizada com sucesso!');
           }
         } else {
@@ -504,14 +606,14 @@ async function selecionarTodos() {
     return;
   }
   
-  const produtos = await window.carregarProdutos();
+  const produtos = await window.carregarProdutos(modoAtual);
   const busca = document.getElementById('buscaProdutosModal').value.toLowerCase();
   const produtosFiltrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    produto.estante.toString().includes(busca)
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
   );
   
   produtosSelecionados = [...produtosFiltrados];
@@ -538,7 +640,7 @@ async function excluirSelecionados() {
   }
   
   if (confirm(`🐻 Tem certeza que deseja excluir ${produtosSelecionados.length} produtos selecionados?`)) {
-    const produtos = await window.carregarProdutos();
+    const produtos = await window.carregarProdutos(modoAtual);
     const novosProdutos = produtos.filter(produto => {
       return !produtosSelecionados.some(p => 
         p.codigo === produto.codigo && 
@@ -547,7 +649,7 @@ async function excluirSelecionados() {
       );
     });
     
-    await window.salvarProdutos(novosProdutos);
+    await window.salvarProdutos(novosProdutos, modoAtual);
     produtosSelecionados = [];
     await filtrarProdutosModal();
     alert(`🗑️ ${produtosSelecionados.length} produtos excluídos com sucesso!`);
@@ -580,17 +682,22 @@ async function salvarProduto() {
   const cor = document.getElementById('corProduto').value.trim();
   const modelo = document.getElementById('modeloProduto').value.trim();
   const quantidade = document.getElementById('quantidadeProduto').value.trim();
-  const estante = document.getElementById('estanteSelect').value;
-  const nivel = document.getElementById('nivelSelect').value;
+  const estante = modoAtual === 'sala_g' ? document.getElementById('estanteSelect').value : null;
+  const nivel = modoAtual === 'sala_g' ? document.getElementById('nivelSelect').value : null;
   const erroCadastro = document.getElementById('erroCadastro');
   
   // Validações
-  if (!codigo || !descricao || !cor || !modelo || !quantidade || !estante || !nivel) {
+  if (!codigo || !descricao || !cor || !modelo || !quantidade) {
     erroCadastro.textContent = '❌ Preencha todos os campos!';
     return;
   }
   
-  const produtos = await window.carregarProdutos();
+  if (modoAtual === 'sala_g' && (!estante || !nivel)) {
+    erroCadastro.textContent = '❌ Preencha estante e nível!';
+    return;
+  }
+  
+  const produtos = await window.carregarProdutos(modoAtual);
   // Verifica se já existe um produto com o mesmo código, cor e modelo
   const produtoJaExiste = produtos.some(produto => 
     produto.codigo === codigo && 
@@ -603,18 +710,25 @@ async function salvarProduto() {
     return;
   }
   
-  // Verifica se o nível da estante já está ocupado
-  const nivelOcupado = await verificarNivelOcupado(estante, nivel);
-  if (nivelOcupado) {
-    const confirmar = confirm(`⚠️ Já existe um produto cadastrado no nível ${nivel} da estante ${estante}. Deseja cadastrar mesmo assim?`);
-    if (!confirmar) {
-      return;
+  // Verifica se o nível da estante já está ocupado (apenas para Sala G)
+  if (modoAtual === 'sala_g') {
+    const nivelOcupado = await verificarNivelOcupado(estante, nivel);
+    if (nivelOcupado) {
+      const confirmar = confirm(`⚠️ Já existe um produto cadastrado no nível ${nivel} da estante ${estante}. Deseja cadastrar mesmo assim?`);
+      if (!confirmar) {
+        return;
+      }
     }
   }
   
-  const novoProduto = { codigo, descricao, cor, modelo, quantidade, estante, nivel };
+  const novoProduto = { codigo, descricao, cor, modelo, quantidade };
+  if (modoAtual === 'sala_g') {
+    novoProduto.estante = estante;
+    novoProduto.nivel = nivel;
+  }
+  
   produtos.push(novoProduto);
-  await window.salvarProdutos(produtos);
+  await window.salvarProdutos(produtos, modoAtual);
   
   alert('💾 Produto salvo com sucesso!');
   erroCadastro.textContent = '';
@@ -625,12 +739,16 @@ async function salvarProduto() {
   document.getElementById('corProduto').value = '';
   document.getElementById('modeloProduto').value = '';
   document.getElementById('quantidadeProduto').value = '';
+  if (modoAtual === 'sala_g') {
+    document.getElementById('estanteSelect').value = '';
+    document.getElementById('nivelSelect').value = '';
+  }
 }
 
 // Função para buscar um produto
 async function buscarProduto() {
   const busca = document.getElementById('buscaProduto').value.toLowerCase();
-  const produtos = await window.carregarProdutos();
+  const produtos = await window.carregarProdutos(modoAtual);
   const resultadoBusca = document.getElementById('resultadoBusca');
   
   const produtosEncontrados = produtos.filter(produto => 
@@ -638,7 +756,7 @@ async function buscarProduto() {
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    produto.estante.toString().includes(busca)
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
   );
   
   if (produtosEncontrados.length === 0) {
@@ -652,7 +770,7 @@ async function buscarProduto() {
           <p style="margin: 5px 0;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
           <p style="margin: 5px 0;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
           <p style="margin: 5px 0;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
-          <p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>
+          ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
           <p style="margin: 5px 0;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
         </li>
       `;
@@ -702,7 +820,9 @@ estantes.forEach(estante => {
   rect.setAttribute("stroke-width", "1");
   
   rect.addEventListener("click", () => {
-    exibirProdutosEstante(estante.n);
+    if (modoAtual === 'sala_g') {
+      exibirProdutosEstante(estante.n);
+    }
   });
   
   svg.appendChild(rect);
@@ -734,6 +854,7 @@ document.getElementById('loginBtn').addEventListener('click', abrirModalLogin);
 document.getElementById('logoutBtn').addEventListener('click', fazerLogout);
 document.getElementById('entrarBtn').addEventListener('click', fazerLogin);
 document.querySelector('.close-login').addEventListener('click', fecharModalLogin);
+document.getElementById('modoSelect').addEventListener('change', trocarModo);
 
 // Inicializar o select de estantes
 preencherSelectEstantes();
@@ -797,7 +918,7 @@ if (estaLogado()) {
     gap: 10px;
   }
 
-  .actions button {
+  .actions button, .actions select {
     margin: 5px;
     cursor: pointer;
   }
@@ -906,6 +1027,15 @@ if (estaLogado()) {
     height: auto;
     min-width: 800px;
     display: block;
+  }
+
+  .estoque-list-container {
+    width: 100%;
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    background-color: var(--bege-fundo);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 15px;
   }
 
   .rodape {
