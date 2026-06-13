@@ -67,6 +67,7 @@
         <option value="estoque_p">📦 Estoque P</option>
         <option value="estoque_m">📦 Estoque M</option>
       </select>
+      <button id="refreshBtn" class="button-fofo" title="Atualizar dados">🔄 Atualizar</button>
       <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
       <button class="button-fofo">❓ Sobre</button>
       <button id="loginBtn" class="button-fofo" style="display: none;">🔑 Login</button>
@@ -258,6 +259,36 @@ function fecharModalLogin() {
   document.getElementById('loginModal').style.display = 'none';
 }
 
+// Função para recarregar os dados sem trocar de modo
+async function recarregarDados() {
+  // Recarregar a lista de produtos no modal se estiver aberto
+  if (document.getElementById('produtosCadastradosModal').style.display === 'block') {
+    await filtrarProdutosModal();
+  }
+  
+  // Recarregar a lista de estoque se estiver no modo de estoque
+  if (modoAtual !== 'sala_g') {
+    await exibirListaEstoque();
+  }
+  
+  alert('🔄 Dados atualizados com sucesso!');
+}
+
+// Função para salvar o modo atual no localStorage
+function salvarModoAtual() {
+  localStorage.setItem('mollibear_modo_atual', modoAtual);
+}
+
+// Função para carregar o modo atual do localStorage
+function carregarModoAtual() {
+  const modoSalvo = localStorage.getItem('mollibear_modo_atual');
+  if (modoSalvo) {
+    modoAtual = modoSalvo;
+    document.getElementById('modoSelect').value = modoSalvo;
+    trocarModo(); // Aplicar o modo salvo
+  }
+}
+
 // Dados das estantes (apenas para Sala G)
 const estantes = [
   // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos
@@ -351,6 +382,7 @@ function preencherSelectEstantes() {
 // Função para trocar entre Sala G e Estoques
 async function trocarModo() {
   modoAtual = document.getElementById('modoSelect').value;
+  salvarModoAtual(); // Salvar o modo atual no localStorage
   
   if (modoAtual === 'sala_g') {
     document.getElementById('mapaContainer').style.display = 'block';
@@ -855,9 +887,13 @@ document.getElementById('logoutBtn').addEventListener('click', fazerLogout);
 document.getElementById('entrarBtn').addEventListener('click', fazerLogin);
 document.querySelector('.close-login').addEventListener('click', fecharModalLogin);
 document.getElementById('modoSelect').addEventListener('change', trocarModo);
+document.getElementById('refreshBtn').addEventListener('click', recarregarDados);
 
 // Inicializar o select de estantes
 preencherSelectEstantes();
+
+// Carregar o modo atual do localStorage ao carregar a página
+carregarModoAtual();
 
 // Verificar se o usuário já está logado ao carregar a página
 if (estaLogado()) {
