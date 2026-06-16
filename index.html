@@ -129,7 +129,7 @@
         <label>Descrição</label>
         <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
 
-        <label>Cor</label>
+        <label>Cor (Não obrigatório)</label>
         <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco, Rosa">
 
         <label>Modelo</label>
@@ -496,7 +496,7 @@ async function exibirListaEstoque() {
       infoProduto.innerHTML = `
         <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
-        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        ${produto.cor ? `<p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
@@ -551,7 +551,7 @@ async function exibirProdutosEstante(estanteNumero) {
       infoProduto.innerHTML = `
         <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
-        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        ${produto.cor ? `<p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
@@ -582,7 +582,7 @@ async function filtrarProdutosModal() {
   const produtosFiltrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
-    produto.cor.toLowerCase().includes(busca) ||
+    (produto.cor && produto.cor.toLowerCase().includes(busca)) ||
     produto.modelo.toLowerCase().includes(busca) ||
     (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
     (produto.dataLancamento && produto.dataLancamento.includes(busca))
@@ -616,7 +616,7 @@ async function filtrarProdutosModal() {
       infoProduto.innerHTML = `
         <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
-        <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+        ${produto.cor ? `<p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 80px; padding: 6px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center; font-size: 16px;"></p>
@@ -698,7 +698,7 @@ async function selecionarTodos() {
   const produtosFiltrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
-    produto.cor.toLowerCase().includes(busca) ||
+    (produto.cor && produto.cor.toLowerCase().includes(busca)) ||
     produto.modelo.toLowerCase().includes(busca) ||
     (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
     (produto.dataLancamento && produto.dataLancamento.includes(busca))
@@ -776,7 +776,7 @@ async function salvarProduto() {
   const erroCadastro = document.getElementById('erroCadastro');
   
   // Validações
-  if (!codigo || !descricao || !cor || !modelo || !quantidade) {
+  if (!codigo || !descricao || !modelo || !quantidade) {
     erroCadastro.textContent = '❌ Preencha todos os campos obrigatórios!';
     return;
   }
@@ -810,7 +810,10 @@ async function salvarProduto() {
     }
   }
   
-  const novoProduto = { codigo, descricao, cor, modelo, quantidade };
+  const novoProduto = { codigo, descricao, modelo, quantidade };
+  if (cor) {
+    novoProduto.cor = cor;
+  }
   if (dataLancamento) {
     novoProduto.dataLancamento = dataLancamento;
   }
@@ -847,7 +850,7 @@ async function buscarProduto() {
   const produtosEncontrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
-    produto.cor.toLowerCase().includes(busca) ||
+    (produto.cor && produto.cor.toLowerCase().includes(busca)) ||
     produto.modelo.toLowerCase().includes(busca) ||
     (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
     (produto.dataLancamento && produto.dataLancamento.includes(busca))
@@ -862,7 +865,7 @@ async function buscarProduto() {
         <li style="margin-bottom: 10px; padding: 10px; border: 2px solid #f5e6d3; border-radius: 8px; background: #fffaf0; font-size: 16px;">
           <p style="margin: 5px 0;"><strong>📌 Código:</strong> ${produto.codigo}</p>
           <p style="margin: 5px 0;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
-          <p style="margin: 5px 0;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
+          ${produto.cor ? `<p style="margin: 5px 0;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
           <p style="margin: 5px 0;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
           ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
           <p style="margin: 5px 0;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
