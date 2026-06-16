@@ -98,7 +98,8 @@
 
   <header>
     <div class="title">
-      🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻
+      <img src="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/e0bc728b-09c7-4795-9f34-c63312b9f4c6?sv=2025-01-05&spr=https&se=2026-06-16T02%3A27%3A57Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-16T01%3A27%3A57Z&ske=2026-06-16T02%3A27%3A57Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=ktLA9jOzfwZ675jCPI4KZbG8Zd2kF%2BOwr11QEogpNg0%3D" alt="Logo Mollibear" class="logo-img">
+      <span>🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻</span>
     </div>
 
     <div class="actions">
@@ -333,11 +334,12 @@ function carregarModoAtual() {
   }
 }
 
-// Função para formatar data para exibição
+// Função para formatar data para exibição (CORRIGIDO: sem conversão para Date)
 function formatarData(data) {
   if (!data) return "Não informado";
-  const date = new Date(data);
-  return date.toLocaleDateString('pt-BR');
+  // Retorna a data no formato DD/MM/AAAA (sem conversão para Date para evitar fuso horário)
+  const [ano, mes, dia] = data.split('-');
+  return `${dia}/${mes}/${ano}`;
 }
 
 // Dados das estantes (apenas para Sala G)
@@ -770,7 +772,7 @@ async function salvarProduto() {
   const cor = document.getElementById('corProduto').value.trim();
   const modelo = document.getElementById('modeloProduto').value.trim();
   const quantidade = document.getElementById('quantidadeProduto').value.trim();
-  const dataLancamento = document.getElementById('dataLancamento').value;
+  const dataLancamento = document.getElementById('dataLancamento').value; // Data no formato YYYY-MM-DD
   const estante = modoAtual === 'sala_g' ? document.getElementById('estanteSelect').value : null;
   const nivel = modoAtual === 'sala_g' ? document.getElementById('nivelSelect').value : null;
   const erroCadastro = document.getElementById('erroCadastro');
@@ -815,6 +817,7 @@ async function salvarProduto() {
     novoProduto.cor = cor;
   }
   if (dataLancamento) {
+    // Salvar a data NO FORMATO YYYY-MM-DD (sem conversão para evitar fuso horário)
     novoProduto.dataLancamento = dataLancamento;
   }
   if (modoAtual === 'sala_g') {
@@ -1006,11 +1009,23 @@ if (estaLogado()) {
   }
 
   .title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
     font-size: 24px;
     font-weight: bold;
     color: var(--bege-escuro);
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
     margin-bottom: 10px;
+  }
+
+  .logo-img {
+    height: 60px;
+    width: auto;
+    border-radius: 50%;
+    border: 2px solid var(--bege-escuro);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   .actions {
@@ -1248,8 +1263,13 @@ if (estaLogado()) {
     .title {
       font-size: 28px;
       text-align: left;
+      justify-content: flex-start;
     }
     
+    .title span {
+      margin-left: 10px;
+    }
+
     .actions {
       justify-content: flex-end;
     }
