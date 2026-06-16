@@ -8,12 +8,42 @@
   <!-- Favicon -->
   <link rel="icon" href="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D" type="image/png">
   
-  <!-- Meta Tags para PWA -->
+  <!-- Meta Tags para PWA e iOS -->
   <meta name="theme-color" content="#fffaf0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mollibear Estoque">
+  <meta name="description" content="Sistema de Estoque da Mollibear">
+  
+  <!-- Ícones para iOS (tamanhos específicos) -->
   <link rel="apple-touch-icon" href="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D">
-  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D">
+  <link rel="apple-touch-icon" sizes="152x152" href="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D">
+  <link rel="apple-touch-icon" sizes="167x167" href="https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D">
+  
+  <!-- Manifest para PWA -->
+  <link rel="manifest" href="data:application/json;charset=utf-8,
+  {
+    \"name\": \"Mollibear Estoque\",
+    \"short_name\": \"Mollibear\",
+    \"description\": \"Sistema de Estoque da Mollibear\",
+    \"start_url\": \"/\",
+    \"display\": \"standalone\",
+    \"background_color\": \"#fffaf0\",
+    \"theme_color\": \"#8b4513\",
+    \"icons\": [
+      {
+        \"src\": \"https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D\",
+        \"sizes\": \"192x192\",
+        \"type\": \"image/png\"
+      },
+      {
+        \"src\": \"https://mistralaichatupprodswe.blob.core.windows.net/chat-images/6e/73/c1/6e73c104-e880-4f93-a4ce-f891e9c53915/773b6274-9d90-48bb-9779-0204e01cf05a/34bcb23f-0fc8-45f7-a581-1ac376874c4b?sv=2025-01-05&spr=https&se=2026-06-15T18%3A26%3A43Z&skoid=c9baccad-3639-4379-a088-07b7e349293c&sktid=4fbc1168-2984-4d17-af19-ac5138c2378e&skt=2026-06-15T17%3A26%3A43Z&ske=2026-06-15T18%3A26%3A43Z&sks=b&skv=2025-01-05&sr=b&sp=r&sig=hMumhe5tXliM%2FfaMtA5kQb5WKrYeG4uKkV15k8lJasU%3D\",
+        \"sizes\": \"512x512\",
+        \"type\": \"image/png\"
+      }
+    ]
+  }">
 
   <!-- Firebase SDK v10 -->
   <script type="module">
@@ -107,6 +137,9 @@
 
         <label>Quantidade</label>
         <input type="number" id="quantidadeProduto" class="input-fofo">
+
+        <label>Data de Lançamento (Não obrigatório)</label>
+        <input type="date" id="dataLancamento" class="input-fofo">
 
         <div class="row" id="estanteNivelRow">
           <div>
@@ -390,6 +423,13 @@ function preencherSelectEstantes() {
   }
 }
 
+// Função para formatar data para exibição
+function formatarData(data) {
+  if (!data) return "Não informado";
+  const date = new Date(data);
+  return date.toLocaleDateString('pt-BR');
+}
+
 // Função para trocar entre Sala G e Estoques
 async function trocarModo() {
   modoAtual = document.getElementById('modoSelect').value;
@@ -459,6 +499,7 @@ async function exibirListaEstoque() {
         <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+        ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
         ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
       `;
       
@@ -512,8 +553,9 @@ async function exibirProdutosEstante(estanteNumero) {
         <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
-        <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Nível:</strong> ${produto.nivel}</p>
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+        ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📦 Nível:</strong> ${produto.nivel}</p>
       `;
       
       li.appendChild(infoProduto);
@@ -542,7 +584,8 @@ async function filtrarProdutosModal() {
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
+    (produto.dataLancamento && produto.dataLancamento.includes(busca))
   );
   
   listaProdutos.innerHTML = '';
@@ -577,6 +620,7 @@ async function filtrarProdutosModal() {
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> <input type="number" id="quantidade-${index}" value="${produto.quantidade}" style="width: 80px; padding: 6px; border: 1px solid #f5e6d3; border-radius: 4px; text-align: center; font-size: 16px;"></p>
+        ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       `;
       
       const checkbox = document.createElement('input');
@@ -656,7 +700,8 @@ async function selecionarTodos() {
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
+    (produto.dataLancamento && produto.dataLancamento.includes(busca))
   );
   
   produtosSelecionados = [...produtosFiltrados];
@@ -725,13 +770,14 @@ async function salvarProduto() {
   const cor = document.getElementById('corProduto').value.trim();
   const modelo = document.getElementById('modeloProduto').value.trim();
   const quantidade = document.getElementById('quantidadeProduto').value.trim();
+  const dataLancamento = document.getElementById('dataLancamento').value;
   const estante = modoAtual === 'sala_g' ? document.getElementById('estanteSelect').value : null;
   const nivel = modoAtual === 'sala_g' ? document.getElementById('nivelSelect').value : null;
   const erroCadastro = document.getElementById('erroCadastro');
   
   // Validações
   if (!codigo || !descricao || !cor || !modelo || !quantidade) {
-    erroCadastro.textContent = '❌ Preencha todos os campos!';
+    erroCadastro.textContent = '❌ Preencha todos os campos obrigatórios!';
     return;
   }
   
@@ -765,6 +811,9 @@ async function salvarProduto() {
   }
   
   const novoProduto = { codigo, descricao, cor, modelo, quantidade };
+  if (dataLancamento) {
+    novoProduto.dataLancamento = dataLancamento;
+  }
   if (modoAtual === 'sala_g') {
     novoProduto.estante = estante;
     novoProduto.nivel = nivel;
@@ -782,6 +831,7 @@ async function salvarProduto() {
   document.getElementById('corProduto').value = '';
   document.getElementById('modeloProduto').value = '';
   document.getElementById('quantidadeProduto').value = '';
+  document.getElementById('dataLancamento').value = '';
   if (modoAtual === 'sala_g') {
     document.getElementById('estanteSelect').value = '';
     document.getElementById('nivelSelect').value = '';
@@ -799,7 +849,8 @@ async function buscarProduto() {
     produto.descricao.toLowerCase().includes(busca) || 
     produto.cor.toLowerCase().includes(busca) ||
     produto.modelo.toLowerCase().includes(busca) ||
-    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca))
+    (modoAtual === 'sala_g' && produto.estante && produto.estante.toString().includes(busca)) ||
+    (produto.dataLancamento && produto.dataLancamento.includes(busca))
   );
   
   if (produtosEncontrados.length === 0) {
@@ -815,6 +866,7 @@ async function buscarProduto() {
           <p style="margin: 5px 0;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
           ${modoAtual === 'sala_g' ? `<p style="margin: 5px 0;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
           <p style="margin: 5px 0;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+          ${produto.dataLancamento ? `<p style="margin: 5px 0;"><strong>📅 Data de Lançamento:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
         </li>
       `;
     });
@@ -1158,6 +1210,17 @@ if (estaLogado()) {
   .numero {
     font-size: 16px;
     font-weight: bold;
+  }
+
+  /* Estilo para o input de data */
+  input[type="date"] {
+    padding: 10px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
+    width: 100%;
   }
 
   /* Media Queries para responsividade */
