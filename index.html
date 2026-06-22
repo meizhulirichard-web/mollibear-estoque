@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Estoque - Mollibear 🧸</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" type="image/png">
+  
+  <!-- Meta Tags para PWA -->
+  <meta name="theme-color" content="#fffaf0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mollibear Estoque">
+  <meta name="description" content="Sistema de Estoque da Mollibear">
+  
+  <!-- Ícones para iOS -->
+  <link rel="apple-touch-icon" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true">
+  <link rel="apple-touch-icon" sizes="152x152" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true">
+  <link rel="apple-touch-icon" sizes="167x167" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true">
+  
+  <!-- Manifest para PWA -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Firebase SDK -->
+  <script type="module" src="firebase.js"></script>
+  <!-- App principal -->
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">
+        <img src="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" alt="Logo Mollibear" class="logo-img">
+        <span>🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻</span>
+      </div>
+      
+      <div class="counters">
+        <div class="counter">
+          <span>📦 <strong id="totalProdutos">0</strong> Produtos</span>
+        </div>
+        <div class="counter">
+          <span>📊 <strong id="totalQuantidade">0</strong> Quantidade Total</span>
+        </div>
+        <div class="counter">
+          <span>🗺️ <strong id="estantesUtilizadas">0</strong>/51 Estantes</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <select id="modoSelect" class="button-fofo">
+          <option value="sala_p">🗺️ Sala P (com mapa)</option>
+          <option value="estoque_g">📦 Estoque G</option>
+          <option value="estoque_p">📦 Estoque P</option>
+          <option value="estoque_m">📦 Estoque M</option>
+        </select>
+        <button id="refreshBtn" class="button-fofo" title="Atualizar dados">🔄 Atualizar</button>
+        <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
+        <button id="historicoBtn" class="button-fofo">📜 Histórico</button>
+        <button class="button-fofo">❓ Sobre</button>
+        <button id="loginBtn" class="button-fofo" style="display: none;">🔑 Login</button>
+        <button id="logoutBtn" class="button-fofo" style="display: none;">🚪 Sair</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <aside id="asideCadastro">
+        <div class="card">
+          <h2>📦 CADASTRO DE PRODUTO</h2>
+          
+          <label>Código do Produto *</label>
+          <input type="text" id="codigoProduto" class="input-fofo" placeholder="Ex: TB001">
+
+          <label>Descrição *</label>
+          <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
+
+          <label>Cor (Não obrigatório)</label>
+          <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco, Rosa">
+
+          <label>Modelo *</label>
+          <input type="text" id="modeloProduto" class="input-fofo" placeholder="Ex: Grande, Médio, Pequeno">
+
+          <label>Quantidade *</label>
+          <input type="number" id="quantidadeProduto" class="input-fofo" min="0">
+
+          <label>Data de Lançamento (Não obrigatório)</label>
+          <input type="date" id="dataLancamento" class="input-fofo">
+
+          <div class="row" id="estanteNivelRow">
+            <div>
+              <label>Estante *</label>
+              <select id="estanteSelect" class="input-fofo"></select>
+            </div>
+            <div>
+              <label>Nível *</label>
+              <select id="nivelSelect" class="input-fofo">
+                <option>A</option>
+                <option>B</option>
+                <option>C</option>
+                <option>D</option>
+                <option>E</option>
+              </select>
+            </div>
+          </div>
+
+          <button class="save button-fofo" id="salvarProdutoBtn">💾 Salvar Produto</button>
+          <p id="erroCadastro" class="error-message"></p>
+        </div>
+
+        <div class="card">
+          <h2>🔍 BUSCAR PRODUTO</h2>
+          
+          <div class="search-container">
+            <input type="text" id="buscaProduto" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo ou estante">
+            <select id="ordenarPor" class="input-fofo">
+              <option value="codigo">Ordenar por Código</option>
+              <option value="descricao">Ordenar por Descrição</option>
+              <option value="quantidade">Ordenar por Quantidade</option>
+              <option value="data">Ordenar por Data</option>
+            </select>
+          </div>
+          
+          <div class="result" id="resultadoBusca"></div>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </aside>
+
+      <main>
+        <div id="conteudoDinamico">
+          <!-- Mapa da Sala P -->
+          <div id="mapaContainer" style="display: block;">
+            <h2>🗺️ MAPA DA SALA P</h2>
+            <p class="mapa-info">🚪 <strong>Porta</strong> está localizada à esquerda da loja.</p>
+            <div class="mapa-container">
+              <svg id="mapa" viewBox="0 0 1200 800" class="mapa"></svg>
+            </div>
+            <div class="rodape">
+              💡 Clique em uma estante para ver os produtos! 🐻
+              <div class="legenda">
+                <span class="legenda-item"><div class="cor-verde"></div> 0-50% ocupado</span>
+                <span class="legenda-item"><div class="cor-amarelo"></div> 50-80% ocupado</span>
+                <span class="legenda-item"><div class="cor-vermelho"></div> 80-100% ocupado</span>
+                <span class="legenda-item"><div class="cor-vazio"></div> Vazia</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lista do Estoque -->
+          <div id="estoqueContainer" style="display: none;">
+            <h2 id="estoqueTitulo">📦 Estoque</h2>
+            <p class="estoque-info">📋 Lista de todos os produtos em estoque.</p>
+            <div class="estoque-list-container">
+              <div id="listaEstoque"></div>
+              <div class="pagination" id="estoquePagination"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal para Produtos Cadastrados -->
+        <div id="produtosCadastradosModal" class="modal">
+          <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="tituloModalProdutos">📋 Produtos Cadastrados</h2>
+            <div class="modal-actions">
+              <input type="text" id="buscaProdutosModal" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo ou estante">
+              <select id="ordenarModalPor" class="input-fofo">
+                <option value="codigo">Ordenar por Código</option>
+                <option value="descricao">Ordenar por Descrição</option>
+                <option value="quantidade">Ordenar por Quantidade</option>
+                <option value="data">Ordenar por Data</option>
+              </select>
+              <button class="button-fofo" id="selecionarTodosBtn">✅ Selecionar</button>
+              <button class="button-fofo" id="excluirSelecionadosBtn">🗑️ Excluir Selecionados</button>
+            </div>
+            <div id="listaProdutosCadastrados"></div>
+            <div class="pagination" id="modalPagination"></div>
+          </div>
+        </div>
+
+        <!-- Modal para Produtos por Estante -->
+        <div id="produtosEstanteModal" class="modal">
+          <div class="modal-content">
+            <span class="close-estante">&times;</span>
+            <h2 id="tituloProdutosEstante">📦 Produtos na Estante <span id="estanteNumero"></span></h2>
+            <div id="listaProdutosEstante"></div>
+          </div>
+        </div>
+
+        <!-- Modal para Movimentação -->
+        <div id="movimentacaoModal" class="modal">
+          <div class="modal-content">
+            <span class="close-movimentacao">&times;</span>
+            <h2 id="tituloMovimentacao">📊 Movimentação de Estoque</h2>
+            <div id="infoProdutoMovimentacao"></div>
+            <div class="movimentacao-form">
+              <div class="form-group">
+                <label>Quantidade Atual:</label>
+                <input type="number" id="quantidadeAtualMov" class="input-fofo" readonly>
+              </div>
+              <div class="form-group">
+                <label>Entrada (➕):</label>
+                <input type="number" id="entradaMov" class="input-fofo" min="0" value="0">
+              </div>
+              <div class="form-group">
+                <label>Saída (➖):</label>
+                <input type="number" id="saidaMov" class="input-fofo" min="0" value="0">
+              </div>
+              <div class="form-group">
+                <label>Resultado:</label>
+                <input type="number" id="resultadoMov" class="input-fofo" readonly>
+              </div>
+              <div class="form-group">
+                <label>Observação (Opcional):</label>
+                <input type="text" id="observacaoMov" class="input-fofo" placeholder="Ex: Reposição, Venda, etc.">
+              </div>
+              <button class="button-fofo" id="confirmarMovimentacaoBtn">✅ Confirmar Movimentação</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de Login -->
+        <div id="loginModal" class="modal">
+          <div class="modal-content" style="width: 90%; max-width: 400px;">
+            <span class="close-login">&times;</span>
+            <h2>🔑 Login de Administrador</h2>
+            <label class="modal-label">Senha:</label>
+            <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite a senha">
+            <button class="button-fofo" id="entrarBtn" style="width: 100%;">🔓 Entrar</button>
+            <p id="erroLogin" class="error-message"></p>
+          </div>
+        </div>
+
+        <!-- Modal de Histórico -->
+        <div id="historicoModal" class="modal">
+          <div class="modal-content">
+            <span class="close-historico">&times;</span>
+            <h2>📜 Histórico de Movimentações</h2>
+            <div class="historico-filters">
+              <input type="date" id="historicoDataInicio" class="input-fofo">
+              <input type="date" id="historicoDataFim" class="input-fofo">
+              <button class="button-fofo" id="filtrarHistoricoBtn">🔍 Filtrar</button>
+            </div>
+            <div id="listaHistorico"></div>
+            <div class="pagination" id="historicoPagination"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
