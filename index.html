@@ -353,21 +353,22 @@ function formatarData(data) {
 function calcularPorcentagemOcupacao(estanteNumero) {
   const produtosEstante = produtosAtuais.filter(p => p.estante == estanteNumero);
   const quantidadeProdutos = produtosEstante.length;
-  // 100% = 4 produtos
   return (quantidadeProdutos / 4) * 100;
 }
 
 // Função para determinar a cor da estante com base na ocupação
 function getCorEstante(estanteNumero) {
   const porcentagem = calcularPorcentagemOcupacao(estanteNumero);
-  if (porcentagem === 0) return "#f5e6d3"; // Vazia
-  if (porcentagem <= 25) return "#d4edda"; // Verde (0-25% = 0-1 produto)
-  if (porcentagem <= 75) return "#fff3cd"; // Amarelo (25-75% = 2-3 produtos)
-  return "#f8d7da"; // Vermelho (75-100% = 4 produtos)
+  if (porcentagem === 0) return "#f5e6d3";
+  if (porcentagem <= 25) return "#d4edda";
+  if (porcentagem <= 75) return "#fff3cd";
+  return "#f8d7da";
 }
 
 // Função para gerar card de produto (REUTILIZÁVEL)
-function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null, mostrarBotoesEdicao = true) {
+function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null) {
+  const idInput = `quantidade-${produto.codigo}-${produto.cor || 'sem-cor'}-${produto.modelo}`;
+  
   return `
     <div style="margin-bottom: 15px; padding: 12px; border: 2px solid #f5e6d3; border-radius: 8px; background-color: #fffaf0; display: flex; justify-content: space-between; align-items: center; flex-direction: column; position: relative;">
       ${mostrarCheckbox ? `
@@ -383,13 +384,10 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
         ${mostrarEstanteNivel && produto.estante ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
           <p style="margin: 0; font-size: 16px;"><strong>📊 Quantidade:</strong></p>
-          ${mostrarBotoesEdicao ? `
-            <button class="button-quantidade" onclick="diminuirQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}')">➖</button>
-            <span id="quantidade-${produto.codigo}-${produto.cor || ''}-${produto.modelo}" style="font-size: 16px; font-weight: bold;">${produto.quantidade}</span>
-            <button class="button-quantidade" onclick="aumentarQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}')">➕</button>
-          ` : `
-            <span style="font-size: 16px; font-weight: bold;">${produto.quantidade}</span>
-          `}
+          <input type="number" id="${idInput}" value="${produto.quantidade}" 
+            style="width: 80px; padding: 6px; border: 2px solid #8b4513; border-radius: 8px; text-align: center; font-size: 16px;" 
+            min="0">
+          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}', '${idInput}')">💾</button>
         </div>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       </div>
@@ -397,48 +395,41 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
   `;
 }
 
-// Função para aumentar quantidade
-async function aumentarQuantidade(codigo, cor, modelo) {
+// Função para salvar a quantidade editada
+async function salvarQuantidade(codigo, cor, modelo, inputId) {
   if (!estaLogado()) {
     alert('❌ Você não tem permissão para alterar quantidades!');
     return;
   }
   
-  const produtos = await window.carregarProdutos(modoAtual);
-  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+  const novaQuantidade = parseInt(document.getElementById(inputId).value);
   
-  if (produtoIndex !== -1) {
-    produtos[produtoIndex].quantidade = (produtos[produtoIndex].quantidade || 0) + 1;
-    await window.salvarProdutos(produtos, modoAtual);
-    
-    // Atualizar o span de quantidade
-    const spanId = `quantidade-${codigo}-${cor}-${modelo}`;
-    document.getElementById(spanId).textContent = produtos[produtoIndex].quantidade;
-  }
-}
-
-// Função para diminuir quantidade
-async function diminuirQuantidade(codigo, cor, modelo) {
-  if (!estaLogado()) {
-    alert('❌ Você não tem permissão para alterar quantidades!');
-    return;
-  }
-  
-  const produtos = await window.carregarProdutos(modoAtual);
-  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
-  
-  if (produtoIndex !== -1) {
-    if ((produtos[produtoIndex].quantidade || 0) <= 0) {
-      alert('❌ Quantidade não pode ser menor que 0!');
-      return;
+  if (isNaN(novaQuantidade) || novaQuantidade < 0) {
+    alert('❌ Insira uma quantidade válida (número positivo)!');
+    // Reverter para o valor anterior
+    const produtos = await window.carregarProdutos(modoAtual);
+    const produto = produtos.find(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+    if (produto) {
+      document.getElementById(inputId).value = produto.quantidade;
     }
-    
-    produtos[produtoIndex].quantidade = (produtos[produtoIndex].quantidade || 0) - 1;
+    return;
+  }
+  
+  const produtos = await window.carregarProdutos(modoAtual);
+  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+  
+  if (produtoIndex !== -1) {
+    produtos[produtoIndex].quantidade = novaQuantidade;
     await window.salvarProdutos(produtos, modoAtual);
-    
-    // Atualizar o span de quantidade
-    const spanId = `quantidade-${codigo}-${cor}-${modelo}`;
-    document.getElementById(spanId).textContent = produtos[produtoIndex].quantidade;
+    alert('✅ Quantidade atualizada com sucesso!');
+  } else {
+    alert('❌ Produto não encontrado!');
+    // Reverter para o valor anterior
+    const produtosAtualizados = await window.carregarProdutos(modoAtual);
+    const produto = produtosAtualizados.find(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+    if (produto) {
+      document.getElementById(inputId).value = produto.quantidade;
+    }
   }
 }
 
@@ -450,7 +441,6 @@ function atualizarContadores() {
   document.getElementById('totalProdutos').textContent = totalProdutos;
   document.getElementById('quantidadeTotal').textContent = quantidadeTotal.toLocaleString('pt-BR');
   
-  // Atualizar contador de estantes apenas para Sala P
   if (modoAtual === 'sala_p') {
     const estantesOcupadas = new Set(produtosAtuais.filter(p => p.estante).map(p => p.estante)).size;
     document.getElementById('estantesUtilizadas').textContent = `${estantesOcupadas}/51`;
@@ -550,13 +540,8 @@ async function trocarModo() {
     document.getElementById('tituloModalProdutos').textContent = '📋 Produtos Cadastrados (Sala P)';
     document.getElementById('estoqueTitulo').textContent = '🗺️ MAPA DA SALA P';
     
-    // Atualizar cores das estantes no mapa
     atualizarCoresEstantes();
-    
-    // Mostrar contador de estantes
     document.getElementById('contadorEstantes').style.display = 'block';
-    
-    // Atualizar placeholder da busca
     document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo ou estante";
     document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo ou estante";
   } else {
@@ -571,10 +556,7 @@ async function trocarModo() {
     document.getElementById('tituloModalProdutos').textContent = `📋 Produtos Cadastrados (${nomesEstoque[modoAtual] || 'Estoque'})`;
     document.getElementById('estoqueTitulo').textContent = `📦 ${nomesEstoque[modoAtual] || 'Estoque'}`;
     
-    // Esconder contador de estantes
     document.getElementById('contadorEstantes').style.display = 'none';
-    
-    // Atualizar placeholder da busca (sem estante)
     document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo";
     document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo";
     
@@ -604,11 +586,9 @@ async function exibirListaEstoque(pagina = 1) {
   if (produtosPaginados.length === 0) {
     listaEstoque.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado!</p>';
   } else {
-    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
-    const mostrarBotoes = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto) => {
-      listaEstoque.innerHTML += gerarCardProduto(produto, mostrarEstante, false, null, mostrarBotoes);
+      listaEstoque.innerHTML += gerarCardProduto(produto, mostrarEstante);
     });
   }
   
@@ -636,9 +616,8 @@ async function exibirProdutosEstante(estanteNumero) {
   if (produtosEstante.length === 0) {
     listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado nesta estante!</p>';
   } else {
-    // Mostrar estante/nível e botões de edição no modal de estante
     produtosEstante.forEach((produto) => {
-      listaProdutos.innerHTML += gerarCardProduto(produto, true, false, null, true);
+      listaProdutos.innerHTML += gerarCardProduto(produto, true);
     });
   }
   
@@ -658,7 +637,6 @@ async function filtrarProdutosModal(pagina = 1) {
   
   const produtos = await window.carregarProdutos(modoAtual);
   
-  // Para estoques, não buscar por estante
   const produtosFiltrados = produtos.filter(produto => 
     produto.codigo.toLowerCase().includes(busca) || 
     produto.descricao.toLowerCase().includes(busca) || 
@@ -677,12 +655,10 @@ async function filtrarProdutosModal(pagina = 1) {
   if (produtosPaginados.length === 0) {
     listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto encontrado!</p>';
   } else {
-    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
-    const mostrarBotoes = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto, index) => {
       const globalIndex = produtosOrdenados.indexOf(produto);
-      listaProdutos.innerHTML += gerarCardProduto(produto, mostrarEstante, true, globalIndex, mostrarBotoes);
+      listaProdutos.innerHTML += gerarCardProduto(produto, mostrarEstante, true, globalIndex);
     });
   }
   
@@ -861,11 +837,9 @@ async function buscarProduto() {
     resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">🐻 Nenhum produto encontrado!</p>';
   } else {
     resultadoBusca.innerHTML = '';
-    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
-    const mostrarBotoes = modoAtual === 'sala_p';
     produtosEncontrados.forEach(produto => {
-      resultadoBusca.innerHTML += gerarCardProduto(produto, mostrarEstante, false, null, mostrarBotoes);
+      resultadoBusca.innerHTML += gerarCardProduto(produto, mostrarEstante);
     });
   }
 }
@@ -909,38 +883,27 @@ function carregarModoAtual() {
 
 // Dados das estantes (apenas para Sala P) - ESTANTES 17-21 MOVIDAS 280px PARA A ESQUERDA
 const estantes = [
-  // LADO ESQUERDO DA LOJA (1-6): da frente para os fundos
   {n:1, x:20, y:600, w:50, h:80},
   {n:2, x:20, y:510, w:50, h:80},
   {n:3, x:20, y:420, w:50, h:80},
   {n:4, x:20, y:330, w:50, h:80},
   {n:5, x:20, y:240, w:50, h:80},
   {n:6, x:20, y:150, w:50, h:80},
-
-  // PARTE SUPERIOR ESQUERDA (7-8)
   {n:7, x:100, y:20, w:100, h:40},
   {n:8, x:210, y:20, w:100, h:40},
-
-  // PARTE SUPERIOR DIREITA (9-12)
   {n:9, x:700, y:20, w:100, h:40},
   {n:10, x:810, y:20, w:100, h:40},
   {n:11, x:920, y:20, w:100, h:40},
   {n:12, x:1030, y:20, w:100, h:40},
-
-  // LADO DIREITO DA LOJA (13-16): espelhadas de cima para baixo
   {n:16, x:1120, y:600, w:50, h:80},
   {n:15, x:1120, y:445, w:50, h:80},
   {n:14, x:1120, y:365, w:50, h:80},
   {n:13, x:1120, y:285, w:50, h:80},
-
-  // PARTE INFERIOR (17-21): MOVIDAS 280px PARA A ESQUERDA
   {n:17, x:750, y:700, w:100, h:40},
   {n:18, x:640, y:700, w:100, h:40},
   {n:19, x:530, y:700, w:100, h:40},
   {n:20, x:420, y:700, w:100, h:40},
   {n:21, x:310, y:700, w:100, h:40},
-
-  // ILHA CENTRAL INFERIOR (22-31)
   {n:22, x:410, y:550, w:100, h:40},
   {n:23, x:520, y:550, w:100, h:40},
   {n:24, x:630, y:550, w:100, h:40},
@@ -951,8 +914,6 @@ const estantes = [
   {n:29, x:630, y:600, w:100, h:40},
   {n:30, x:740, y:600, w:100, h:40},
   {n:31, x:850, y:600, w:100, h:40},
-
-  // ILHA CENTRAL INTERMEDIÁRIA (32-42)
   {n:32, x:410, y:400, w:100, h:40},
   {n:33, x:520, y:400, w:100, h:40},
   {n:34, x:630, y:400, w:100, h:40},
@@ -964,8 +925,6 @@ const estantes = [
   {n:40, x:630, y:450, w:100, h:40},
   {n:41, x:740, y:450, w:100, h:40},
   {n:42, x:850, y:450, w:100, h:40},
-
-  // ILHA CENTRAL SUPERIOR (43-51)
   {n:43, x:500, y:200, w:100, h:40},
   {n:44, x:610, y:200, w:100, h:40},
   {n:45, x:720, y:200, w:100, h:40},
@@ -982,7 +941,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const svg = document.querySelector(".mapa");
   const NS = "http://www.w3.org/2000/svg";
   
-  // Inicializar o SVG (será preenchido pela função atualizarCoresEstantes)
   atualizarCoresEstantes();
 
   // Adicionar eventos aos botões
@@ -1204,28 +1162,23 @@ function atualizarCoresEstantes() {
     color: var(--bege-fundo);
   }
 
-  .button-quantidade {
+  .button-salvar-quantidade {
     padding: 6px 12px;
-    background-color: var(--bege-claro);
-    color: var(--bege-escuro);
-    border: 2px solid var(--bege-escuro);
-    border-radius: 50%;
+    background-color: #d4edda;
+    color: #155724;
+    border: 2px solid #28a745;
+    border-radius: 8px;
     font-family: 'Comic Sans MS', cursive, sans-serif;
     font-weight: bold;
-    font-size: 18px;
+    font-size: 16px;
     cursor: pointer;
     transition: all 0.2s;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
-  .button-quantidade:hover {
-    background-color: var(--bege-escuro);
-    color: var(--bege-fundo);
-    transform: scale(1.1);
+  .button-salvar-quantidade:hover {
+    background-color: #28a745;
+    color: white;
+    transform: scale(1.05);
   }
 
   .content {
@@ -1408,6 +1361,20 @@ function atualizarCoresEstantes() {
     font-family: 'Comic Sans MS', cursive, sans-serif;
     font-size: 16px;
     width: 100%;
+  }
+
+  input[type="number"] {
+    padding: 6px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
+  }
+
+  input[type="number"]:focus {
+    border-color: var(--bege-escuro);
+    outline: none;
   }
 
   .legenda-mapa {
