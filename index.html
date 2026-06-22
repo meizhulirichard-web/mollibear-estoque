@@ -213,10 +213,10 @@
             💡 Clique em uma estante para ver os produtos cadastrados! 🐻
           </div>
           <div class="legenda-mapa">
-            <div class="legenda-item"><span class="cor-verde"></span> 0-50% ocupado</div>
-            <div class="legenda-item"><span class="cor-amarelo"></span> 50-80% ocupado</div>
-            <div class="legenda-item"><span class="cor-vermelho"></span> 80-100% ocupado</div>
-            <div class="legenda-item"><span class="cor-vazio"></span> Vazia</div>
+            <div class="legenda-item"><span class="cor-verde"></span> 0-25% (0-1 produto)</div>
+            <div class="legenda-item"><span class="cor-amarelo"></span> 25-75% (2-3 produtos)</div>
+            <div class="legenda-item"><span class="cor-vermelho"></span> 75-100% (4 produtos)</div>
+            <div class="legenda-item"><span class="cor-vazio"></span> Vazia (0 produtos)</div>
           </div>
         </div>
 
@@ -260,24 +260,6 @@
           <span class="close-estante">&times;</span>
           <h2 id="tituloProdutosEstante">📦 Produtos na Estante</h2>
           <div id="listaProdutosEstante"></div>
-        </div>
-      </div>
-
-      <!-- Modal para Movimentação de Estoque -->
-      <div id="movimentacaoModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 500px;">
-          <span class="close-movimentacao">&times;</span>
-          <h2 id="tituloMovimentacao">📦 Movimentação de Estoque</h2>
-          <div id="infoProdutoMovimentacao" style="margin-bottom: 20px;"></div>
-          <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <button id="entradaBtn" class="button-fofo" style="flex: 1; background-color: #d4edda; color: #155724;">➕ Entrada</button>
-            <button id="saidaBtn" class="button-fofo" style="flex: 1; background-color: #f8d7da; color: #721c24;">➖ Saída</button>
-          </div>
-          <div id="formMovimentacao" style="display: none;">
-            <label>Quantidade</label>
-            <input type="number" id="quantidadeMovimentacao" class="input-fofo" min="1" value="1">
-            <button id="confirmarMovimentacaoBtn" class="save button-fofo" style="margin-top: 15px; width: 100%;">✅ Confirmar</button>
-          </div>
         </div>
       </div>
 
@@ -367,27 +349,25 @@ function formatarData(data) {
   return `${dia}/${mes}/${ano}`;
 }
 
-// Função para calcular porcentagem de ocupação de uma estante
+// Função para calcular porcentagem de ocupação de uma estante (100% = 4 produtos)
 function calcularPorcentagemOcupacao(estanteNumero) {
   const produtosEstante = produtosAtuais.filter(p => p.estante == estanteNumero);
-  if (produtosEstante.length === 0) return 0;
-  
-  const totalItens = produtosEstante.reduce((sum, p) => sum + parseInt(p.quantidade || 0), 0);
-  const capacidade = 100;
-  return (totalItens / capacidade) * 100;
+  const quantidadeProdutos = produtosEstante.length;
+  // 100% = 4 produtos
+  return (quantidadeProdutos / 4) * 100;
 }
 
 // Função para determinar a cor da estante com base na ocupação
 function getCorEstante(estanteNumero) {
   const porcentagem = calcularPorcentagemOcupacao(estanteNumero);
   if (porcentagem === 0) return "#f5e6d3"; // Vazia
-  if (porcentagem <= 50) return "#d4edda"; // Verde (0-50%)
-  if (porcentagem <= 80) return "#fff3cd"; // Amarelo (50-80%)
-  return "#f8d7da"; // Vermelho (80-100%)
+  if (porcentagem <= 25) return "#d4edda"; // Verde (0-25% = 0-1 produto)
+  if (porcentagem <= 75) return "#fff3cd"; // Amarelo (25-75% = 2-3 produtos)
+  return "#f8d7da"; // Vermelho (75-100% = 4 produtos)
 }
 
 // Função para gerar card de produto (REUTILIZÁVEL)
-function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null) {
+function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null, mostrarBotoesEdicao = true) {
   return `
     <div style="margin-bottom: 15px; padding: 12px; border: 2px solid #f5e6d3; border-radius: 8px; background-color: #fffaf0; display: flex; justify-content: space-between; align-items: center; flex-direction: column; position: relative;">
       ${mostrarCheckbox ? `
@@ -401,18 +381,65 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
         ${produto.cor ? `<p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
         <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
         ${mostrarEstanteNivel && produto.estante ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
-        <p style="margin: 5px 0; font-size: 16px;"><strong>📊 Quantidade:</strong> ${produto.quantidade}</p>
+        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+          <p style="margin: 0; font-size: 16px;"><strong>📊 Quantidade:</strong></p>
+          ${mostrarBotoesEdicao ? `
+            <button class="button-quantidade" onclick="diminuirQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}')">➖</button>
+            <span id="quantidade-${produto.codigo}-${produto.cor || ''}-${produto.modelo}" style="font-size: 16px; font-weight: bold;">${produto.quantidade}</span>
+            <button class="button-quantidade" onclick="aumentarQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}')">➕</button>
+          ` : `
+            <span style="font-size: 16px; font-weight: bold;">${produto.quantidade}</span>
+          `}
+        </div>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       </div>
-      
-      ${mostrarEstanteNivel ? `
-        <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px;">
-          <button class="button-movimentacao entrada" onclick="abrirModalMovimentacao('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}', ${produto.quantidade}, 'entrada')">➕ Entrada</button>
-          <button class="button-movimentacao saida" onclick="abrirModalMovimentacao('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}', ${produto.quantidade}, 'saida')">➖ Saída</button>
-        </div>
-      ` : ''}
     </div>
   `;
+}
+
+// Função para aumentar quantidade
+async function aumentarQuantidade(codigo, cor, modelo) {
+  if (!estaLogado()) {
+    alert('❌ Você não tem permissão para alterar quantidades!');
+    return;
+  }
+  
+  const produtos = await window.carregarProdutos(modoAtual);
+  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+  
+  if (produtoIndex !== -1) {
+    produtos[produtoIndex].quantidade = (produtos[produtoIndex].quantidade || 0) + 1;
+    await window.salvarProdutos(produtos, modoAtual);
+    
+    // Atualizar o span de quantidade
+    const spanId = `quantidade-${codigo}-${cor}-${modelo}`;
+    document.getElementById(spanId).textContent = produtos[produtoIndex].quantidade;
+  }
+}
+
+// Função para diminuir quantidade
+async function diminuirQuantidade(codigo, cor, modelo) {
+  if (!estaLogado()) {
+    alert('❌ Você não tem permissão para alterar quantidades!');
+    return;
+  }
+  
+  const produtos = await window.carregarProdutos(modoAtual);
+  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+  
+  if (produtoIndex !== -1) {
+    if ((produtos[produtoIndex].quantidade || 0) <= 0) {
+      alert('❌ Quantidade não pode ser menor que 0!');
+      return;
+    }
+    
+    produtos[produtoIndex].quantidade = (produtos[produtoIndex].quantidade || 0) - 1;
+    await window.salvarProdutos(produtos, modoAtual);
+    
+    // Atualizar o span de quantidade
+    const spanId = `quantidade-${codigo}-${cor}-${modelo}`;
+    document.getElementById(spanId).textContent = produtos[produtoIndex].quantidade;
+  }
 }
 
 // Função para atualizar contadores
@@ -577,10 +604,11 @@ async function exibirListaEstoque(pagina = 1) {
   if (produtosPaginados.length === 0) {
     listaEstoque.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado!</p>';
   } else {
-    // Para estoques, não mostrar estante/nível
+    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
+    const mostrarBotoes = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto) => {
-      listaEstoque.innerHTML += gerarCardProduto(produto, mostrarEstante);
+      listaEstoque.innerHTML += gerarCardProduto(produto, mostrarEstante, false, null, mostrarBotoes);
     });
   }
   
@@ -608,8 +636,9 @@ async function exibirProdutosEstante(estanteNumero) {
   if (produtosEstante.length === 0) {
     listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado nesta estante!</p>';
   } else {
+    // Mostrar estante/nível e botões de edição no modal de estante
     produtosEstante.forEach((produto) => {
-      listaProdutos.innerHTML += gerarCardProduto(produto, true);
+      listaProdutos.innerHTML += gerarCardProduto(produto, true, false, null, true);
     });
   }
   
@@ -619,101 +648,6 @@ async function exibirProdutosEstante(estanteNumero) {
 // Função para fechar o modal de estante
 function fecharModalEstante() {
   document.getElementById('produtosEstanteModal').style.display = 'none';
-}
-
-// Função para abrir modal de movimentação
-function abrirModalMovimentacao(codigo, cor, modelo, quantidadeAtual, tipo) {
-  const modal = document.getElementById('movimentacaoModal');
-  const infoProduto = document.getElementById('infoProdutoMovimentacao');
-  const formMovimentacao = document.getElementById('formMovimentacao');
-  
-  modal.dataset.codigo = codigo;
-  modal.dataset.cor = cor;
-  modal.dataset.modelo = modelo;
-  modal.dataset.quantidadeAtual = quantidadeAtual;
-  modal.dataset.tipo = tipo;
-  
-  const produto = produtosAtuais.find(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
-  infoProduto.innerHTML = `
-    <p><strong>Código:</strong> ${codigo}</p>
-    <p><strong>Descrição:</strong> ${produto?.descricao || 'N/A'}</p>
-    ${cor ? `<p><strong>Cor:</strong> ${cor}</p>` : ''}
-    <p><strong>Modelo:</strong> ${modelo}</p>
-    <p><strong>Quantidade Atual:</strong> ${quantidadeAtual}</p>
-    <p><strong>Tipo:</strong> ${tipo === 'entrada' ? '➕ Entrada' : '➖ Saída'}</p>
-  `;
-  
-  formMovimentacao.style.display = 'block';
-  document.getElementById('quantidadeMovimentacao').value = '1';
-  document.getElementById('quantidadeMovimentacao').focus();
-  
-  modal.style.display = 'block';
-}
-
-// Função para fechar modal de movimentação
-function fecharModalMovimentacao() {
-  document.getElementById('movimentacaoModal').style.display = 'none';
-  document.getElementById('formMovimentacao').style.display = 'none';
-}
-
-// Função para confirmar movimentação
-async function confirmarMovimentacao() {
-  if (!estaLogado()) {
-    alert('❌ Você não tem permissão para fazer movimentações!');
-    return;
-  }
-  
-  const modal = document.getElementById('movimentacaoModal');
-  const codigo = modal.dataset.codigo;
-  const cor = modal.dataset.cor;
-  const modelo = modal.dataset.modelo;
-  const quantidadeAtual = parseInt(modal.dataset.quantidadeAtual);
-  const tipo = modal.dataset.tipo;
-  const quantidadeMov = parseInt(document.getElementById('quantidadeMovimentacao').value);
-  
-  if (isNaN(quantidadeMov) || quantidadeMov <= 0) {
-    alert('❌ Insira uma quantidade válida!');
-    return;
-  }
-  
-  let novaQuantidade;
-  if (tipo === 'entrada') {
-    novaQuantidade = quantidadeAtual + quantidadeMov;
-  } else {
-    if (quantidadeMov > quantidadeAtual) {
-      alert('❌ Quantidade de saída não pode ser maior que a quantidade atual!');
-      return;
-    }
-    novaQuantidade = quantidadeAtual - quantidadeMov;
-  }
-  
-  const produtos = await window.carregarProdutos(modoAtual);
-  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
-  
-  if (produtoIndex !== -1) {
-    const historico = {
-      data: new Date().toISOString().split('T')[0],
-      codigo: codigo,
-      descricao: produtos[produtoIndex].descricao,
-      cor: cor,
-      modelo: modelo,
-      quantidadeAnterior: quantidadeAtual,
-      quantidadeNova: novaQuantidade,
-      tipo: tipo === 'entrada' ? 'Entrada' : 'Saída',
-      quantidadeMovimentada: quantidadeMov,
-      usuario: "Administrador"
-    };
-    
-    console.log("Movimentação registrada:", historico);
-    
-    produtos[produtoIndex].quantidade = novaQuantidade;
-    await window.salvarProdutos(produtos, modoAtual);
-    
-    alert(`✅ Movimentação realizada! Nova quantidade: ${novaQuantidade}`);
-    fecharModalMovimentacao();
-  } else {
-    alert('❌ Produto não encontrado!');
-  }
 }
 
 // Função para filtrar produtos no modal
@@ -743,11 +677,12 @@ async function filtrarProdutosModal(pagina = 1) {
   if (produtosPaginados.length === 0) {
     listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto encontrado!</p>';
   } else {
-    // Para estoques, não mostrar estante/nível
+    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
+    const mostrarBotoes = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto, index) => {
       const globalIndex = produtosOrdenados.indexOf(produto);
-      listaProdutos.innerHTML += gerarCardProduto(produto, mostrarEstante, true, globalIndex);
+      listaProdutos.innerHTML += gerarCardProduto(produto, mostrarEstante, true, globalIndex, mostrarBotoes);
     });
   }
   
@@ -926,10 +861,11 @@ async function buscarProduto() {
     resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">🐻 Nenhum produto encontrado!</p>';
   } else {
     resultadoBusca.innerHTML = '';
-    // Para estoques, não mostrar estante/nível
+    // Para estoques, não mostrar estante/nível e não mostrar botões de edição
     const mostrarEstante = modoAtual === 'sala_p';
+    const mostrarBotoes = modoAtual === 'sala_p';
     produtosEncontrados.forEach(produto => {
-      resultadoBusca.innerHTML += gerarCardProduto(produto, mostrarEstante);
+      resultadoBusca.innerHTML += gerarCardProduto(produto, mostrarEstante, false, null, mostrarBotoes);
     });
   }
 }
@@ -998,11 +934,11 @@ const estantes = [
   {n:13, x:1120, y:285, w:50, h:80},
 
   // PARTE INFERIOR (17-21): MOVIDAS 280px PARA A ESQUERDA
-  {n:17, x:750, y:700, w:100, h:40},  // 1030 - 280 = 750
-  {n:18, x:640, y:700, w:100, h:40},  // 920 - 280 = 640
-  {n:19, x:530, y:700, w:100, h:40},  // 810 - 280 = 530
-  {n:20, x:420, y:700, w:100, h:40},  // 700 - 280 = 420
-  {n:21, x:310, y:700, w:100, h:40},  // 590 - 280 = 310
+  {n:17, x:750, y:700, w:100, h:40},
+  {n:18, x:640, y:700, w:100, h:40},
+  {n:19, x:530, y:700, w:100, h:40},
+  {n:20, x:420, y:700, w:100, h:40},
+  {n:21, x:310, y:700, w:100, h:40},
 
   // ILHA CENTRAL INFERIOR (22-31)
   {n:22, x:410, y:550, w:100, h:40},
@@ -1060,7 +996,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('ordenarModalPor').addEventListener('change', () => filtrarProdutosModal(1));
   document.querySelector('.close-estante').addEventListener('click', fecharModalEstante);
-  document.querySelector('.close-movimentacao').addEventListener('click', fecharModalMovimentacao);
   document.getElementById('selecionarTodosBtn').addEventListener('click', selecionarTodos);
   document.getElementById('excluirSelecionadosBtn').addEventListener('click', excluirSelecionados);
   document.getElementById('loginBtn').addEventListener('click', abrirModalLogin);
@@ -1072,15 +1007,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modoAtual !== 'sala_p') exibirListaEstoque();
     else atualizarCoresEstantes();
   });
-  document.getElementById('entradaBtn').addEventListener('click', () => {
-    document.getElementById('formMovimentacao').style.display = 'block';
-    document.getElementById('tituloMovimentacao').textContent = '➕ Entrada de Estoque';
-  });
-  document.getElementById('saidaBtn').addEventListener('click', () => {
-    document.getElementById('formMovimentacao').style.display = 'block';
-    document.getElementById('tituloMovimentacao').textContent = '➖ Saída de Estoque';
-  });
-  document.getElementById('confirmarMovimentacaoBtn').addEventListener('click', confirmarMovimentacao);
 
   // Inicializar o select de estantes
   preencherSelectEstantes();
@@ -1278,30 +1204,28 @@ function atualizarCoresEstantes() {
     color: var(--bege-fundo);
   }
 
-  .button-movimentacao {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 8px;
+  .button-quantidade {
+    padding: 6px 12px;
+    background-color: var(--bege-claro);
+    color: var(--bege-escuro);
+    border: 2px solid var(--bege-escuro);
+    border-radius: 50%;
     font-family: 'Comic Sans MS', cursive, sans-serif;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 18px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .button-movimentacao.entrada {
-    background-color: var(--verde);
-    color: #155724;
-  }
-
-  .button-movimentacao.saida {
-    background-color: var(--vermelho);
-    color: #721c24;
-  }
-
-  .button-movimentacao:hover {
-    transform: scale(1.05);
-    opacity: 0.9;
+  .button-quantidade:hover {
+    background-color: var(--bege-escuro);
+    color: var(--bege-fundo);
+    transform: scale(1.1);
   }
 
   .content {
@@ -1450,14 +1374,14 @@ function atualizarCoresEstantes() {
     font-size: 22px;
   }
 
-  .close, .close-estante, .close-login, .close-movimentacao {
+  .close, .close-estante, .close-login {
     float: right;
     font-size: 28px;
     cursor: pointer;
     color: var(--bege-escuro);
   }
 
-  .close:hover, .close-estante:hover, .close-login:hover, .close-movimentacao:hover {
+  .close:hover, .close-estante:hover, .close-login:hover {
     color: #ff6b6b;
   }
 
