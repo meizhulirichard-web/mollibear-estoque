@@ -365,9 +365,14 @@ function getCorEstante(estanteNumero) {
   return "#f8d7da";
 }
 
+// Função para gerar ID único para o input de quantidade (usando apenas o código do produto)
+function gerarIdInput(codigo) {
+  return `quantidade-${codigo}`;
+}
+
 // Função para gerar card de produto (REUTILIZÁVEL)
 function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null) {
-  const idInput = `quantidade-${produto.codigo}-${produto.cor || 'sem-cor'}-${produto.modelo}`;
+  const idInput = gerarIdInput(produto.codigo);
   
   return `
     <div style="margin-bottom: 15px; padding: 12px; border: 2px solid #f5e6d3; border-radius: 8px; background-color: #fffaf0; display: flex; justify-content: space-between; align-items: center; flex-direction: column; position: relative;">
@@ -387,7 +392,7 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
           <input type="number" id="${idInput}" value="${produto.quantidade}" 
             style="width: 80px; padding: 6px; border: 2px solid #8b4513; border-radius: 8px; text-align: center; font-size: 16px;" 
             min="0">
-          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${produto.cor || ''}', '${produto.modelo}', '${idInput}')">💾</button>
+          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${idInput}')">💾</button>
         </div>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       </div>
@@ -396,7 +401,7 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
 }
 
 // Função para salvar a quantidade editada
-async function salvarQuantidade(codigo, cor, modelo, inputId) {
+async function salvarQuantidade(codigo, inputId) {
   if (!estaLogado()) {
     alert('❌ Você não tem permissão para alterar quantidades!');
     return;
@@ -408,7 +413,7 @@ async function salvarQuantidade(codigo, cor, modelo, inputId) {
     alert('❌ Insira uma quantidade válida (número positivo)!');
     // Reverter para o valor anterior
     const produtos = await window.carregarProdutos(modoAtual);
-    const produto = produtos.find(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+    const produto = produtos.find(p => p.codigo === codigo);
     if (produto) {
       document.getElementById(inputId).value = produto.quantidade;
     }
@@ -416,7 +421,7 @@ async function salvarQuantidade(codigo, cor, modelo, inputId) {
   }
   
   const produtos = await window.carregarProdutos(modoAtual);
-  const produtoIndex = produtos.findIndex(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+  const produtoIndex = produtos.findIndex(p => p.codigo === codigo);
   
   if (produtoIndex !== -1) {
     produtos[produtoIndex].quantidade = novaQuantidade;
@@ -426,7 +431,7 @@ async function salvarQuantidade(codigo, cor, modelo, inputId) {
     alert('❌ Produto não encontrado!');
     // Reverter para o valor anterior
     const produtosAtualizados = await window.carregarProdutos(modoAtual);
-    const produto = produtosAtualizados.find(p => p.codigo === codigo && p.cor === cor && p.modelo === modelo);
+    const produto = produtosAtualizados.find(p => p.codigo === codigo);
     if (produto) {
       document.getElementById(inputId).value = produto.quantidade;
     }
