@@ -60,7 +60,8 @@
       serverTimestamp,
       query,
       where,
-      getDocs 
+      getDocs,
+      writeBatch
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -83,7 +84,9 @@
         const querySnapshot = await getDocs(produtosCol);
         const produtos = [];
         querySnapshot.forEach((doc) => {
-          produtos.push({ id: doc.id, ...doc.data() });
+          if (!doc.data().excluido) { // Ignorar produtos excluídos
+            produtos.push({ id: doc.id, ...doc.data() });
+          }
         });
         return produtos;
       } catch (error) {
@@ -199,6 +202,55 @@
       }
     }
 
+    // Função para migrar dados da estrutura antiga para a nova
+    async function migrarDadosAntigos() {
+      const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
+      const tiposAntigos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
+      
+      for (const tipo of tipos) {
+        try {
+          // Verificar se já existe dados na nova estrutura
+          const novaEstruturaCol = collection(db, `estoque_${tipo}`);
+          const novaSnapshot = await getDocs(novaEstruturaCol);
+          
+          if (novaSnapshot.size > 0) {
+            console.log(`Dados já migrados para estoque_${tipo}. Pulando...`);
+            continue;
+          }
+          
+          // Carregar dados da estrutura antiga
+          const docRef = doc(db, "estoque", `produtos_${tipo}`);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists() && docSnap.data().produtos) {
+            const produtosAntigos = docSnap.data().produtos;
+            console.log(`Encontrados ${produtosAntigos.length} produtos em produtos_${tipo}. Iniciando migração...`);
+            
+            // Usar batch para otimizar a migração
+            const batch = writeBatch(db);
+            
+            for (const produto of produtosAntigos) {
+              if (!produto.excluido) {
+                const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
+                batch.set(produtoRef, produto);
+              }
+            }
+            
+            await batch.commit();
+            console.log(`Migração concluída para estoque_${tipo}: ${produtosAntigos.length} produtos migrados.`);
+            
+            // Mostrar mensagem para o usuário
+            alert(`✅ Migração automática concluída! ${produtosAntigos.length} produtos de ${tipo} foram migrados para a nova estrutura.`);
+          } else {
+            console.log(`Nenhum dado encontrado em produtos_${tipo}.`);
+          }
+        } catch (error) {
+          console.error(`Erro ao migrar dados para estoque_${tipo}:`, error);
+          alert(`⚠️ Erro ao migrar dados para ${tipo}: ${error.message}`);
+        }
+      }
+    }
+
     // Tornar as funções globais
     window.carregarProdutos = carregarProdutos;
     window.salvarProduto = salvarProduto;
@@ -207,6 +259,7 @@
     window.atualizarQuantidadeTransacao = atualizarQuantidadeTransacao;
     window.carregarHistorico = carregarHistorico;
     window.adicionarAoHistorico = adicionarAoHistorico;
+    window.migrarDadosAntigos = migrarDadosAntigos;
   </script>
 </head>
 <body>
@@ -423,6 +476,7 @@ let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
 let usuarioLogado = "";
+let migracaoRealizada = false;
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -430,7 +484,7 @@ function estaLogado() {
 }
 
 // Função para fazer login
-function fazerLogin() {
+async function fazerLogin() {
   const senha = document.getElementById('senhaInput').value;
   const erroLogin = document.getElementById('erroLogin');
   
@@ -443,6 +497,13 @@ function fazerLogin() {
     document.getElementById('asideCadastro').style.display = 'flex';
     erroLogin.textContent = '';
     alert('✅ Login realizado com sucesso!');
+    
+    // Realizar migração automática ao fazer login
+    if (!migracaoRealizada) {
+      await window.migrarDadosAntigos();
+      migracaoRealizada = true;
+    }
+    
     iniciarListenerFirestore();
   } else {
     erroLogin.textContent = '❌ Senha incorreta!';
@@ -1224,7 +1285,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('logoutBtn').style.display = 'block';
     document.getElementById('asideCadastro').style.display = 'flex';
     usuarioLogado = "Administrador";
-    iniciarListenerFirestore();
+    
+    // Realizar migração automática ao carregar a página
+    window.migrarDadosAntigos().then(() => {
+      iniciarListenerFirestore();
+    });
   } else {
     document.getElementById('loginBtn').style.display = 'block';
     document.getElementById('logoutBtn').style.display = 'none';
