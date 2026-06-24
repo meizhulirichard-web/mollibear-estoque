@@ -60,8 +60,7 @@
       serverTimestamp,
       query,
       where,
-      getDocs,
-      writeBatch
+      getDocs 
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -76,6 +75,38 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
+    // Função para migrar dados da estrutura antiga para a nova
+    async function migrarDadosAntigos() {
+      const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
+      let totalMigrados = 0;
+      
+      for (const tipo of tipos) {
+        try {
+          // Verificar se existe o documento antigo
+          const docRef = doc(db, "estoque", `produtos_${tipo}`);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            const dadosAntigos = docSnap.data();
+            const produtos = dadosAntigos.produtos || [];
+            
+            // Migrar cada produto para a nova estrutura
+            for (const produto of produtos) {
+              const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
+              await setDoc(produtoRef, produto);
+              totalMigrados++;
+            }
+            
+            console.log(`✅ Migrados ${produtos.length} produtos de ${tipo}`);
+          }
+        } catch (error) {
+          console.error(`❌ Erro ao migrar dados de ${tipo}:`, error);
+        }
+      }
+      
+      return totalMigrados;
+    }
 
     // Função para carregar todos os produtos de um tipo (NOVA ESTRUTURA: cada produto é um documento)
     async function carregarProdutos(tipo) {
@@ -109,7 +140,7 @@
     async function excluirProduto(codigo, tipo) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, codigo);
-        await setDoc(produtoRef, { excluido: true, dataExclusao: serverTimestamp() });
+        await setDoc(produtoRef, { excluido: true, dataExclusao: serverTimestamp() }, { merge: true });
       } catch (error) {
         console.error("Erro ao excluir produto:", error);
       }
@@ -175,7 +206,7 @@
     async function carregarHistorico() {
       try {
         const historicoCol = collection(db, "historico");
-        const q = query(historicoCol, where("data", ">=", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))); // Últimos 30 dias
+        const q = query(historicoCol, where("data", ">=", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))); // Últimos 90 dias
         const querySnapshot = await getDocs(q);
         const historico = [];
         querySnapshot.forEach((doc) => {
@@ -199,55 +230,6 @@
         });
       } catch (error) {
         console.error("Erro ao adicionar ao histórico:", error);
-      }
-    }
-
-    // Função para migrar dados da estrutura antiga para a nova
-    async function migrarDadosAntigos() {
-      const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
-      const tiposAntigos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
-      
-      for (const tipo of tipos) {
-        try {
-          // Verificar se já existe dados na nova estrutura
-          const novaEstruturaCol = collection(db, `estoque_${tipo}`);
-          const novaSnapshot = await getDocs(novaEstruturaCol);
-          
-          if (novaSnapshot.size > 0) {
-            console.log(`Dados já migrados para estoque_${tipo}. Pulando...`);
-            continue;
-          }
-          
-          // Carregar dados da estrutura antiga
-          const docRef = doc(db, "estoque", `produtos_${tipo}`);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists() && docSnap.data().produtos) {
-            const produtosAntigos = docSnap.data().produtos;
-            console.log(`Encontrados ${produtosAntigos.length} produtos em produtos_${tipo}. Iniciando migração...`);
-            
-            // Usar batch para otimizar a migração
-            const batch = writeBatch(db);
-            
-            for (const produto of produtosAntigos) {
-              if (!produto.excluido) {
-                const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
-                batch.set(produtoRef, produto);
-              }
-            }
-            
-            await batch.commit();
-            console.log(`Migração concluída para estoque_${tipo}: ${produtosAntigos.length} produtos migrados.`);
-            
-            // Mostrar mensagem para o usuário
-            alert(`✅ Migração automática concluída! ${produtosAntigos.length} produtos de ${tipo} foram migrados para a nova estrutura.`);
-          } else {
-            console.log(`Nenhum dado encontrado em produtos_${tipo}.`);
-          }
-        } catch (error) {
-          console.error(`Erro ao migrar dados para estoque_${tipo}:`, error);
-          alert(`⚠️ Erro ao migrar dados para ${tipo}: ${error.message}`);
-        }
       }
     }
 
@@ -285,6 +267,14 @@
       </div>
       <div class="contador">
         <button id="verHistoricoBtn" class="button-historico">📜 Histórico</button>
+      </div>
+    </div>
+    
+    <!-- Notificação de Migração -->
+    <div id="notificacaoMigracao" class="notificacao" style="display: none;">
+      <p>🔄 <strong>Migrando dados antigos para a nova estrutura...</strong> <span id="contadorMigracao">0</span> produtos migrados.</p>
+      <div class="barra-progresso">
+        <div id="progressoMigracao" class="progresso"></div>
       </div>
     </div>
 
@@ -476,7 +466,7 @@ let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
 let usuarioLogado = "";
-let migracaoRealizada = false;
+let migracaoConcluida = false;
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -484,7 +474,7 @@ function estaLogado() {
 }
 
 // Função para fazer login
-async function fazerLogin() {
+function fazerLogin() {
   const senha = document.getElementById('senhaInput').value;
   const erroLogin = document.getElementById('erroLogin');
   
@@ -498,15 +488,41 @@ async function fazerLogin() {
     erroLogin.textContent = '';
     alert('✅ Login realizado com sucesso!');
     
-    // Realizar migração automática ao fazer login
-    if (!migracaoRealizada) {
-      await window.migrarDadosAntigos();
-      migracaoRealizada = true;
+    // Executar migração se não foi feita ainda
+    if (!migracaoConcluida) {
+      executarMigracao();
+    } else {
+      iniciarListenerFirestore();
     }
-    
-    iniciarListenerFirestore();
   } else {
     erroLogin.textContent = '❌ Senha incorreta!';
+  }
+}
+
+// Função para executar a migração
+async function executarMigracao() {
+  const notificacao = document.getElementById('notificacaoMigracao');
+  const contador = document.getElementById('contadorMigracao');
+  const progresso = document.getElementById('progressoMigracao');
+  
+  notificacao.style.display = 'block';
+  
+  try {
+    const totalMigrados = await window.migrarDadosAntigos();
+    contador.textContent = totalMigrados;
+    progresso.style.width = '100%';
+    
+    setTimeout(() => {
+      notificacao.style.display = 'none';
+      migracaoConcluida = true;
+      alert(`✅ Migração concluída! ${totalMigrados} produtos foram migrados para a nova estrutura.`);
+      iniciarListenerFirestore();
+    }, 1000);
+    
+  } catch (error) {
+    console.error("Erro na migração:", error);
+    notificacao.style.display = 'none';
+    alert('❌ Erro durante a migração. Verifique o console para mais detalhes.');
   }
 }
 
@@ -767,7 +783,11 @@ async function trocarModo() {
   preencherSelectEstantes();
   
   if (estaLogado()) {
-    iniciarListenerFirestore();
+    if (!migracaoConcluida) {
+      executarMigracao();
+    } else {
+      iniciarListenerFirestore();
+    }
   }
   
   if (document.getElementById('produtosCadastradosModal').style.display === 'block') {
@@ -1090,7 +1110,6 @@ function carregarModoAtual() {
   if (modoSalvo) {
     modoAtual = modoSalvo;
     document.getElementById('modoSelect').value = modoSalvo;
-    trocarModo();
   }
 }
 
@@ -1286,10 +1305,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('asideCadastro').style.display = 'flex';
     usuarioLogado = "Administrador";
     
-    // Realizar migração automática ao carregar a página
-    window.migrarDadosAntigos().then(() => {
+    // Executar migração se não foi feita ainda
+    if (!migracaoConcluida) {
+      executarMigracao();
+    } else {
       iniciarListenerFirestore();
-    });
+    }
   } else {
     document.getElementById('loginBtn').style.display = 'block';
     document.getElementById('logoutBtn').style.display = 'none';
@@ -1448,6 +1469,34 @@ function atualizarCoresEstantes() {
   .button-historico:hover {
     color: var(--bege-escuro);
     opacity: 0.8;
+  }
+
+  .notificacao {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 16px;
+    color: #856404;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .barra-progresso {
+    width: 100%;
+    height: 20px;
+    background-color: #e9ecef;
+    border-radius: 10px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .progresso {
+    height: 100%;
+    background-color: #ffc107;
+    width: 0%;
+    transition: width 0.5s;
   }
 
   .logo-img {
