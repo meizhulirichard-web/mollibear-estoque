@@ -275,6 +275,14 @@
         <button id="verHistoricoBtn" class="button-historico">📜 Histórico</button>
       </div>
     </div>
+    
+    <!-- Notificação de Migração -->
+    <div id="notificacaoMigracao" class="notificacao" style="display: none;">
+      <p>🔄 <strong>Migrando dados antigos para a nova estrutura...</strong> <span id="contadorMigracao">0</span> produtos migrados.</p>
+      <div class="barra-progresso">
+        <div id="progressoMigracao" class="progresso"></div>
+      </div>
+    </div>
 
     <div class="actions">
       <select id="modoSelect" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513; margin-right: 10px;">
@@ -359,7 +367,7 @@
       <!-- Conteúdo dinâmico: Mapa (Sala P) ou Lista (Estoque G, P, M) -->
       <div id="conteudoDinamico">
         <!-- Mapa da Sala P (exibido por padrão) -->
-        <div id="mapaContainer" style="display: block;">
+        <div id="mapaContainer" style="display: none;">
           <h2>🗺️ MAPA DA SALA P</h2>
           <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
             🚪 <strong>Porta</strong> está localizada à esquerda da loja.
@@ -458,7 +466,7 @@ const SENHA_ADMIN = "mollibear123";
 
 // Variáveis globais
 let produtosSelecionados = [];
-let modoAtual = 'sala_p';
+let modoAtual = localStorage.getItem('mollibear_modo_atual') || 'sala_p';
 let unsubscribeFirestore = null;
 let produtosAtuais = [];
 let paginaAtual = 1;
@@ -664,10 +672,7 @@ async function salvarQuantidade(codigo, inputId, tipo) {
   // Usar transação para evitar conflitos
   const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado);
   
-  if (sucesso) {
-    // Não mostrar alerta para não atrapalhar o fluxo
-    console.log('✅ Quantidade atualizada com sucesso!');
-  } else {
+  if (!sucesso) {
     alert('❌ Erro ao atualizar quantidade. Tente novamente.');
     // Reverter para o valor anterior
     const produtos = await window.carregarProdutos(tipo);
@@ -772,7 +777,7 @@ function preencherSelectEstantes() {
 // Função para trocar entre Sala P e Estoques
 async function trocarModo() {
   modoAtual = document.getElementById('modoSelect').value;
-  salvarModoAtual();
+  localStorage.setItem('mollibear_modo_atual', modoAtual); // SALVAR NO LOCALSTORAGE
   
   if (unsubscribeFirestore) {
     unsubscribeFirestore();
@@ -1292,6 +1297,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   const svg = document.querySelector(".mapa");
   const NS = "http://www.w3.org/2000/svg";
   
+  // Carregar o modo atual do localStorage
+  carregarModoAtual();
+  
+  // Definir o display inicial com base no modoAtual
+  if (modoAtual === 'sala_p') {
+    document.getElementById('mapaContainer').style.display = 'block';
+    document.getElementById('estoqueContainer').style.display = 'none';
+  } else {
+    document.getElementById('mapaContainer').style.display = 'none';
+    document.getElementById('estoqueContainer').style.display = 'block';
+  }
+  
   atualizarCoresEstantes();
 
   // Adicionar eventos aos botões
@@ -1322,9 +1339,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Inicializar o select de estantes
   preencherSelectEstantes();
-
-  // Carregar o modo atual do localStorage
-  carregarModoAtual();
 
   // Verificar se o usuário já está logado
   if (estaLogado()) {
