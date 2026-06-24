@@ -48,7 +48,20 @@
   <!-- Firebase SDK v10 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      getDoc, 
+      setDoc, 
+      onSnapshot,
+      runTransaction,
+      addDoc,
+      serverTimestamp,
+      query,
+      where,
+      getDocs 
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD3j7NdARKWfcyQcaG5dX6VAghuTfCMX68",
@@ -63,36 +76,137 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // Função para carregar todos os produtos de um tipo (NOVA ESTRUTURA: cada produto é um documento)
     async function carregarProdutos(tipo) {
       try {
-        const docRef = doc(db, "estoque", `produtos_${tipo}`);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? docSnap.data().produtos || [] : [];
+        const produtosCol = collection(db, `estoque_${tipo}`);
+        const querySnapshot = await getDocs(produtosCol);
+        const produtos = [];
+        querySnapshot.forEach((doc) => {
+          produtos.push({ id: doc.id, ...doc.data() });
+        });
+        return produtos;
       } catch (error) {
         console.error("Erro ao carregar produtos:", error);
         return [];
       }
     }
 
-    async function salvarProdutos(produtos, tipo) {
+    // Função para salvar um produto (NOVA ESTRUTURA: cada produto é um documento)
+    async function salvarProduto(produto, tipo) {
       try {
-        await setDoc(doc(db, "estoque", `produtos_${tipo}`), { produtos });
+        const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
+        await setDoc(produtoRef, produto);
       } catch (error) {
-        console.error("Erro ao salvar produtos:", error);
+        console.error("Erro ao salvar produto:", error);
       }
     }
 
+    // Função para excluir um produto (NOVA ESTRUTURA)
+    async function excluirProduto(codigo, tipo) {
+      try {
+        const produtoRef = doc(db, `estoque_${tipo}`, codigo);
+        await setDoc(produtoRef, { excluido: true, dataExclusao: serverTimestamp() });
+      } catch (error) {
+        console.error("Erro ao excluir produto:", error);
+      }
+    }
+
+    // Função para atualizar quantidade com runTransaction (evita conflitos)
+    async function atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuario = "Administrador") {
+      try {
+        const produtoRef = doc(db, `estoque_${tipo}`, codigo);
+        
+        await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(produtoRef);
+          
+          if (!docSnap.exists()) {
+            throw "Produto não encontrado!";
+          }
+          
+          const produtoAtual = docSnap.data();
+          const quantidadeAnterior = parseInt(produtoAtual.quantidade || 0);
+          
+          // Atualizar a quantidade
+          transaction.update(produtoRef, { quantidade: novaQuantidade });
+          
+          // Registrar no histórico
+          const historicoRef = collection(db, "historico");
+          const novoHistorico = {
+            data: serverTimestamp(),
+            codigo: codigo,
+            descricao: produtoAtual.descricao || "N/A",
+            cor: produtoAtual.cor || "N/A",
+            modelo: produtoAtual.modelo || "N/A",
+            quantidadeAnterior: quantidadeAnterior,
+            quantidadeNova: novaQuantidade,
+            tipo: "Atualização de Quantidade",
+            usuario: usuario,
+            modo: tipo
+          };
+          transaction.add(historicoRef, novoHistorico);
+        });
+        
+        return true;
+      } catch (error) {
+        console.error("Erro na transação:", error);
+        return false;
+      }
+    }
+
+    // Função para observar mudanças em tempo real (NOVA ESTRUTURA)
     function observarMudancas(tipo, callback) {
-      const docRef = doc(db, "estoque", `produtos_${tipo}`);
-      return onSnapshot(docRef, (docSnap) => {
-        const produtos = docSnap.exists() ? docSnap.data().produtos || [] : [];
+      const produtosCol = collection(db, `estoque_${tipo}`);
+      return onSnapshot(produtosCol, (querySnapshot) => {
+        const produtos = [];
+        querySnapshot.forEach((doc) => {
+          if (!doc.data().excluido) { // Ignorar produtos excluídos
+            produtos.push({ id: doc.id, ...doc.data() });
+          }
+        });
         callback(produtos);
       });
     }
 
+    // Função para carregar histórico
+    async function carregarHistorico() {
+      try {
+        const historicoCol = collection(db, "historico");
+        const q = query(historicoCol, where("data", ">=", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))); // Últimos 30 dias
+        const querySnapshot = await getDocs(q);
+        const historico = [];
+        querySnapshot.forEach((doc) => {
+          historico.push({ id: doc.id, ...doc.data() });
+        });
+        return historico.sort((a, b) => b.data.toDate() - a.data.toDate());
+      } catch (error) {
+        console.error("Erro ao carregar histórico:", error);
+        return [];
+      }
+    }
+
+    // Função para adicionar ao histórico (para outras operações)
+    async function adicionarAoHistorico(operacao, usuario = "Administrador") {
+      try {
+        const historicoRef = collection(db, "historico");
+        await addDoc(historicoRef, {
+          data: serverTimestamp(),
+          ...operacao,
+          usuario: usuario
+        });
+      } catch (error) {
+        console.error("Erro ao adicionar ao histórico:", error);
+      }
+    }
+
+    // Tornar as funções globais
     window.carregarProdutos = carregarProdutos;
-    window.salvarProdutos = salvarProdutos;
+    window.salvarProduto = salvarProduto;
+    window.excluirProduto = excluirProduto;
     window.observarMudancas = observarMudancas;
+    window.atualizarQuantidadeTransacao = atualizarQuantidadeTransacao;
+    window.carregarHistorico = carregarHistorico;
+    window.adicionarAoHistorico = adicionarAoHistorico;
   </script>
 </head>
 <body>
@@ -115,6 +229,9 @@
       </div>
       <div class="contador" id="contadorEstantes">
         <span>🗺️ <strong>Estantes Utilizadas:</strong> <span id="estantesUtilizadas">0/51</span></span>
+      </div>
+      <div class="contador">
+        <button id="verHistoricoBtn" class="button-historico">📜 Histórico</button>
       </div>
     </div>
 
@@ -145,32 +262,32 @@
       <div class="card">
         <h2>📦 CADASTRO DE PRODUTO</h2>
 
-        <label>Código do Produto</label>
+        <label>Código do Produto *</label>
         <input type="text" id="codigoProduto" class="input-fofo" placeholder="Ex: TB001">
 
-        <label>Descrição</label>
+        <label>Descrição *</label>
         <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
 
         <label>Cor (Não obrigatório)</label>
         <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco, Rosa">
 
-        <label>Modelo</label>
+        <label>Modelo *</label>
         <input type="text" id="modeloProduto" class="input-fofo" placeholder="Ex: Grande, Médio, Pequeno">
 
-        <label>Quantidade</label>
-        <input type="number" id="quantidadeProduto" class="input-fofo">
+        <label>Quantidade *</label>
+        <input type="number" id="quantidadeProduto" class="input-fofo" min="0">
 
         <label>Data de Lançamento (Não obrigatório)</label>
         <input type="date" id="dataLancamento" class="input-fofo">
 
         <div class="row" id="estanteNivelRow">
           <div>
-            <label>Estante</label>
+            <label>Estante *</label>
             <select id="estanteSelect" class="input-fofo"></select>
           </div>
 
           <div>
-            <label>Nível</label>
+            <label>Nível *</label>
             <select id="nivelSelect" class="input-fofo">
               <option>A</option>
               <option>B</option>
@@ -275,6 +392,19 @@
         </div>
       </div>
 
+      <!-- Modal para Histórico -->
+      <div id="historicoModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 900px; max-height: 85%;">
+          <span class="close-historico">&times;</span>
+          <h2>📜 Histórico de Movimentações</h2>
+          <div style="margin-bottom: 15px;">
+            <input type="text" id="buscaHistorico" class="input-fofo" placeholder="Busque por código, descrição ou usuário" style="flex: 1;">
+            <button class="button-fofo" id="buscarHistoricoBtn" style="margin-top: 0;">🔎 Buscar</button>
+          </div>
+          <div id="listaHistorico" style="max-height: 500px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
     </main>
 
   </div>
@@ -292,6 +422,7 @@ let unsubscribeFirestore = null;
 let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
+let usuarioLogado = "";
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -305,6 +436,7 @@ function fazerLogin() {
   
   if (senha === SENHA_ADMIN) {
     localStorage.setItem('mollibear_logado', 'true');
+    usuarioLogado = "Administrador";
     document.getElementById('loginModal').style.display = 'none';
     document.getElementById('loginBtn').style.display = 'none';
     document.getElementById('logoutBtn').style.display = 'block';
@@ -320,6 +452,7 @@ function fazerLogin() {
 // Função para fazer logout
 function fazerLogout() {
   localStorage.removeItem('mollibear_logado');
+  usuarioLogado = "";
   document.getElementById('loginBtn').style.display = 'block';
   document.getElementById('logoutBtn').style.display = 'none';
   document.getElementById('asideCadastro').style.display = 'none';
@@ -345,6 +478,10 @@ function fecharModalLogin() {
 // Função para formatar data
 function formatarData(data) {
   if (!data) return "Não informado";
+  if (data instanceof Object && data.toDate) {
+    const date = data.toDate();
+    return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR');
+  }
   const [ano, mes, dia] = data.split('-');
   return `${dia}/${mes}/${ano}`;
 }
@@ -365,7 +502,7 @@ function getCorEstante(estanteNumero) {
   return "#f8d7da";
 }
 
-// Função para gerar ID único para o input de quantidade (usando apenas o código do produto)
+// Função para gerar ID único para o input de quantidade
 function gerarIdInput(codigo) {
   return `quantidade-${codigo}`;
 }
@@ -389,10 +526,10 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
         ${mostrarEstanteNivel && produto.estante ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
           <p style="margin: 0; font-size: 16px;"><strong>📊 Quantidade:</strong></p>
-          <input type="number" id="${idInput}" value="${produto.quantidade}" 
+          <input type="number" id="${idInput}" value="${produto.quantidade || 0}" 
             style="width: 80px; padding: 6px; border: 2px solid #8b4513; border-radius: 8px; text-align: center; font-size: 16px;" 
             min="0">
-          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${idInput}')">💾</button>
+          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${idInput}', '${modoAtual}')">💾</button>
         </div>
         ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       </div>
@@ -400,8 +537,8 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
   `;
 }
 
-// Função para salvar a quantidade editada
-async function salvarQuantidade(codigo, inputId) {
+// Função para salvar a quantidade editada (USANDO TRANSAÇÃO)
+async function salvarQuantidade(codigo, inputId, tipo) {
   if (!estaLogado()) {
     alert('❌ Você não tem permissão para alterar quantidades!');
     return;
@@ -412,28 +549,26 @@ async function salvarQuantidade(codigo, inputId) {
   if (isNaN(novaQuantidade) || novaQuantidade < 0) {
     alert('❌ Insira uma quantidade válida (número positivo)!');
     // Reverter para o valor anterior
-    const produtos = await window.carregarProdutos(modoAtual);
+    const produtos = await window.carregarProdutos(tipo);
     const produto = produtos.find(p => p.codigo === codigo);
     if (produto) {
-      document.getElementById(inputId).value = produto.quantidade;
+      document.getElementById(inputId).value = produto.quantidade || 0;
     }
     return;
   }
   
-  const produtos = await window.carregarProdutos(modoAtual);
-  const produtoIndex = produtos.findIndex(p => p.codigo === codigo);
+  // Usar transação para evitar conflitos
+  const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado);
   
-  if (produtoIndex !== -1) {
-    produtos[produtoIndex].quantidade = novaQuantidade;
-    await window.salvarProdutos(produtos, modoAtual);
+  if (sucesso) {
     alert('✅ Quantidade atualizada com sucesso!');
   } else {
-    alert('❌ Produto não encontrado!');
+    alert('❌ Erro ao atualizar quantidade. Tente novamente.');
     // Reverter para o valor anterior
-    const produtosAtualizados = await window.carregarProdutos(modoAtual);
-    const produto = produtosAtualizados.find(p => p.codigo === codigo);
+    const produtos = await window.carregarProdutos(tipo);
+    const produto = produtos.find(p => p.codigo === codigo);
     if (produto) {
-      document.getElementById(inputId).value = produto.quantidade;
+      document.getElementById(inputId).value = produto.quantidade || 0;
     }
   }
 }
@@ -718,16 +853,21 @@ async function excluirSelecionados() {
   }
   
   if (confirm(`🐻 Tem certeza que deseja excluir ${produtosSelecionados.length} produtos selecionados?`)) {
-    const produtos = await window.carregarProdutos(modoAtual);
-    const novosProdutos = produtos.filter(produto => {
-      return !produtosSelecionados.some(p => 
-        p.codigo === produto.codigo && 
-        p.cor === produto.cor && 
-        p.modelo === produto.modelo
-      );
-    });
+    for (const produto of produtosSelecionados) {
+      await window.excluirProduto(produto.codigo, modoAtual);
+      
+      // Registrar no histórico
+      await window.adicionarAoHistorico({
+        tipo: "Exclusão",
+        codigo: produto.codigo,
+        descricao: produto.descricao || "N/A",
+        cor: produto.cor || "N/A",
+        modelo: produto.modelo || "N/A",
+        quantidadeAnterior: produto.quantidade || 0,
+        quantidadeNova: 0
+      }, usuarioLogado);
+    }
     
-    await window.salvarProdutos(novosProdutos, modoAtual);
     produtosSelecionados = [];
     await filtrarProdutosModal();
     alert(`🗑️ ${produtosSelecionados.length} produtos excluídos com sucesso!`);
@@ -775,15 +915,12 @@ async function salvarProduto() {
     return;
   }
   
+  // Verificar se o produto já existe
   const produtos = await window.carregarProdutos(modoAtual);
-  const produtoJaExiste = produtos.some(produto => 
-    produto.codigo === codigo && 
-    produto.cor === cor && 
-    produto.modelo === modelo
-  );
+  const produtoJaExiste = produtos.some(produto => produto.codigo === codigo);
   
   if (produtoJaExiste) {
-    erroCadastro.textContent = '❌ Este produto (código + cor + modelo) já está cadastrado!';
+    erroCadastro.textContent = '❌ Este código de produto já está cadastrado!';
     return;
   }
   
@@ -805,8 +942,18 @@ async function salvarProduto() {
     novoProduto.nivel = nivel;
   }
   
-  produtos.push(novoProduto);
-  await window.salvarProdutos(produtos, modoAtual);
+  await window.salvarProduto(novoProduto, modoAtual);
+  
+  // Registrar no histórico
+  await window.adicionarAoHistorico({
+    tipo: "Cadastro",
+    codigo: codigo,
+    descricao: descricao,
+    cor: cor || "N/A",
+    modelo: modelo,
+    quantidadeAnterior: 0,
+    quantidadeNova: parseInt(quantidade)
+  }, usuarioLogado);
   
   alert('💾 Produto salvo com sucesso!');
   erroCadastro.textContent = '';
@@ -883,6 +1030,97 @@ function carregarModoAtual() {
     modoAtual = modoSalvo;
     document.getElementById('modoSelect').value = modoSalvo;
     trocarModo();
+  }
+}
+
+// Função para exibir histórico
+async function exibirHistorico() {
+  const modal = document.getElementById('historicoModal');
+  const listaHistorico = document.getElementById('listaHistorico');
+  
+  const historico = await window.carregarHistorico();
+  
+  if (historico.length === 0) {
+    listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro no histórico!</p>';
+  } else {
+    listaHistorico.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
+      '<thead>' +
+        '<tr style="background-color: var(--bege-claro);">' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Data</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Tipo</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Código</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Descrição</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Anterior</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Nova</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Usuário</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        historico.map(item => `
+          <tr style="border-bottom: 1px solid #f5e6d3;">
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${formatarData(item.data)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.tipo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.codigo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.descricao}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeAnterior}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeNova}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.usuario}</td>
+          </tr>
+        `).join('') +
+      '</tbody>' +
+    '</table>';
+  }
+  
+  modal.style.display = 'block';
+}
+
+// Função para fechar o modal de histórico
+function fecharModalHistorico() {
+  document.getElementById('historicoModal').style.display = 'none';
+}
+
+// Função para buscar no histórico
+async function buscarNoHistorico() {
+  const busca = document.getElementById('buscaHistorico').value.toLowerCase();
+  const historico = await window.carregarHistorico();
+  const listaHistorico = document.getElementById('listaHistorico');
+  
+  const historicoFiltrado = historico.filter(item => 
+    item.codigo.toLowerCase().includes(busca) || 
+    item.descricao.toLowerCase().includes(busca) || 
+    item.usuario.toLowerCase().includes(busca) ||
+    item.tipo.toLowerCase().includes(busca)
+  );
+  
+  if (historicoFiltrado.length === 0) {
+    listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro encontrado!</p>';
+  } else {
+    listaHistorico.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
+      '<thead>' +
+        '<tr style="background-color: var(--bege-claro);">' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Data</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Tipo</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Código</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Descrição</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Anterior</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Nova</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Usuário</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        historicoFiltrado.map(item => `
+          <tr style="border-bottom: 1px solid #f5e6d3;">
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${formatarData(item.data)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.tipo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.codigo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.descricao}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeAnterior}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeNova}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.usuario}</td>
+          </tr>
+        `).join('') +
+      '</tbody>' +
+    '</table>';
   }
 }
 
@@ -970,6 +1208,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modoAtual !== 'sala_p') exibirListaEstoque();
     else atualizarCoresEstantes();
   });
+  document.getElementById('verHistoricoBtn').addEventListener('click', exibirHistorico);
+  document.querySelector('.close-historico').addEventListener('click', fecharModalHistorico);
+  document.getElementById('buscarHistoricoBtn').addEventListener('click', buscarNoHistorico);
 
   // Inicializar o select de estantes
   preencherSelectEstantes();
@@ -982,6 +1223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('loginBtn').style.display = 'none';
     document.getElementById('logoutBtn').style.display = 'block';
     document.getElementById('asideCadastro').style.display = 'flex';
+    usuarioLogado = "Administrador";
     iniciarListenerFirestore();
   } else {
     document.getElementById('loginBtn').style.display = 'block';
@@ -1122,6 +1364,25 @@ function atualizarCoresEstantes() {
     font-size: 16px;
     color: var(--bege-escuro);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+  }
+
+  .button-historico {
+    background: none;
+    border: none;
+    color: var(--bege-escuro);
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+  }
+
+  .button-historico:hover {
+    color: var(--bege-escuro);
+    opacity: 0.8;
   }
 
   .logo-img {
@@ -1332,14 +1593,14 @@ function atualizarCoresEstantes() {
     font-size: 22px;
   }
 
-  .close, .close-estante, .close-login {
+  .close, .close-estante, .close-login, .close-historico {
     float: right;
     font-size: 28px;
     cursor: pointer;
     color: var(--bege-escuro);
   }
 
-  .close:hover, .close-estante:hover, .close-login:hover {
+  .close:hover, .close-estante:hover, .close-login:hover, .close-historico:hover {
     color: #ff6b6b;
   }
 
@@ -1421,6 +1682,32 @@ function atualizarCoresEstantes() {
   .paginacao button {
     padding: 8px 16px;
     border-radius: 8px;
+  }
+
+  /* Estilo para a tabela do histórico */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  th {
+    background-color: var(--bege-claro);
+    padding: 10px;
+    border: 1px solid #8b4513;
+    text-align: left;
+    font-weight: bold;
+    color: var(--bege-escuro);
+  }
+
+  td {
+    padding: 10px;
+    border-bottom: 1px solid #f5e6d3;
+    color: var(--bege-escuro);
+  }
+
+  tr:hover {
+    background-color: rgba(245, 230, 211, 0.3);
   }
 
   /* Media Queries para responsividade */
