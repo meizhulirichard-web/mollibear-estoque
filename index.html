@@ -76,7 +76,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Função para migrar dados da estrutura antiga para a nova
+    // Função para migrar dados da estrutura antiga para a nova (CORRIGIDA)
     async function migrarDadosAntigos() {
       const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
       let totalMigrados = 0;
@@ -93,9 +93,15 @@
             
             // Migrar cada produto para a nova estrutura
             for (const produto of produtos) {
+              // Verificar se o produto já existe na nova estrutura
               const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
-              await setDoc(produtoRef, produto);
-              totalMigrados++;
+              const produtoSnap = await getDoc(produtoRef);
+              
+              // Se não existir, salvar
+              if (!produtoSnap.exists()) {
+                await setDoc(produtoRef, produto);
+                totalMigrados++;
+              }
             }
             
             console.log(`✅ Migrados ${produtos.length} produtos de ${tipo}`);
@@ -267,14 +273,6 @@
       </div>
       <div class="contador">
         <button id="verHistoricoBtn" class="button-historico">📜 Histórico</button>
-      </div>
-    </div>
-    
-    <!-- Notificação de Migração -->
-    <div id="notificacaoMigracao" class="notificacao" style="display: none;">
-      <p>🔄 <strong>Migrando dados antigos para a nova estrutura...</strong> <span id="contadorMigracao">0</span> produtos migrados.</p>
-      <div class="barra-progresso">
-        <div id="progressoMigracao" class="progresso"></div>
       </div>
     </div>
 
@@ -466,7 +464,7 @@ let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
 let usuarioLogado = "";
-let migracaoConcluida = false;
+let migracaoConcluida = localStorage.getItem('migracao_concluida') === 'true';
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -505,23 +503,52 @@ async function executarMigracao() {
   const contador = document.getElementById('contadorMigracao');
   const progresso = document.getElementById('progressoMigracao');
   
-  notificacao.style.display = 'block';
+  // Criar notificação se não existir
+  if (!notificacao) {
+    const divNotificacao = document.createElement('div');
+    divNotificacao.id = 'notificacaoMigracao';
+    divNotificacao.className = 'notificacao';
+    divNotificacao.innerHTML = `
+      <p>🔄 <strong>Migrando dados antigos para a nova estrutura...</strong> <span id="contadorMigracao">0</span> produtos migrados.</p>
+      <div class="barra-progresso">
+        <div id="progressoMigracao" class="progresso"></div>
+      </div>
+    `;
+    document.querySelector('header').insertBefore(divNotificacao, document.querySelector('.actions'));
+  }
   
   try {
     const totalMigrados = await window.migrarDadosAntigos();
-    contador.textContent = totalMigrados;
-    progresso.style.width = '100%';
     
+    // Atualizar contadores da notificação
+    if (document.getElementById('contadorMigracao')) {
+      document.getElementById('contadorMigracao').textContent = totalMigrados;
+    }
+    if (document.getElementById('progressoMigracao')) {
+      document.getElementById('progressoMigracao').style.width = '100%';
+    }
+    
+    // Marcar migração como concluída
+    migracaoConcluida = true;
+    localStorage.setItem('migracao_concluida', 'true');
+    
+    // Remover notificação após 2 segundos
     setTimeout(() => {
-      notificacao.style.display = 'none';
-      migracaoConcluida = true;
-      alert(`✅ Migração concluída! ${totalMigrados} produtos foram migrados para a nova estrutura.`);
-      iniciarListenerFirestore();
-    }, 1000);
+      const notificacao = document.getElementById('notificacaoMigracao');
+      if (notificacao) {
+        notificacao.style.display = 'none';
+      }
+    }, 2000);
+    
+    // Iniciar listener após migração
+    iniciarListenerFirestore();
     
   } catch (error) {
     console.error("Erro na migração:", error);
-    notificacao.style.display = 'none';
+    const notificacao = document.getElementById('notificacaoMigracao');
+    if (notificacao) {
+      notificacao.style.display = 'none';
+    }
     alert('❌ Erro durante a migração. Verifique o console para mais detalhes.');
   }
 }
@@ -638,7 +665,8 @@ async function salvarQuantidade(codigo, inputId, tipo) {
   const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado);
   
   if (sucesso) {
-    alert('✅ Quantidade atualizada com sucesso!');
+    // Não mostrar alerta para não atrapalhar o fluxo
+    console.log('✅ Quantidade atualizada com sucesso!');
   } else {
     alert('❌ Erro ao atualizar quantidade. Tente novamente.');
     // Reverter para o valor anterior
@@ -1481,6 +1509,7 @@ function atualizarCoresEstantes() {
     font-size: 16px;
     color: #856404;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: none;
   }
 
   .barra-progresso {
