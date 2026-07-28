@@ -68,7 +68,7 @@
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     // Importar bcrypt.js para criptografia de senhas
-    import { hash, compare, genSalt } from "https://cdn.skypack.dev/bcryptjs@2.4.3";
+    import { hash, compare } from "https://cdn.skypack.dev/bcryptjs@2.4.3";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD3j7NdARKWfcyQcaG5dX6VAghuTfCMX68",
@@ -352,7 +352,7 @@
           return { sucesso: false, mensagem: "Email não encontrado!" };
         }
         
-        // Gerar uma senha temporária (em um sistema real, enviaria por email)
+        // Gerar uma senha temporária
         const senhaTemporaria = Math.random().toString(36).substring(2, 10);
         const senhaHash = await hash(senhaTemporaria, 10);
         
@@ -427,7 +427,8 @@
 <!-- Toast Notification -->
 <div id="toast" class="toast" style="display: none;"></div>
 
-<div class="app" style="padding-top: 80px;">
+<!-- Conteúdo Principal (com margin-top para não sobrepor a barra fixa) -->
+<div class="app">
 
   <!-- Contadores Visuais -->
   <div class="contadores" id="contadores">
@@ -898,7 +899,7 @@ async function solicitarRecuperacao() {
     if (resultado.sucesso) {
       fecharModalRecuperarSenha();
       alert(`📧 Senha temporária: ${resultado.senhaTemporaria}\n\nUse esta senha para fazer login e depois altere sua senha.`);
-      mostrarToast('📧 Senha temporária enviada!');
+      mostrarToast('📧 Senha temporária gerada!');
     } else {
       erroRecuperacao.textContent = resultado.mensagem;
     }
@@ -1068,8 +1069,6 @@ async function salvarQuantidade(codigo, inputId, tipo) {
   
   if (sucesso) {
     mostrarToast('✅ Quantidade atualizada!');
-    
-    // Adicionar notificação
     adiconarNotificacao(`Quantidade de ${codigo} atualizada para ${novaQuantidade}`);
   } else {
     mostrarToast('❌ Erro ao atualizar quantidade.', 'erro');
@@ -2280,10 +2279,12 @@ function atualizarCoresEstantes() {
     font-weight: bold;
   }
 
+  /* Conteúdo principal com margin-top para não sobrepor a barra fixa */
   .app {
     max-width: 1400px;
     margin: 0 auto;
     padding: 10px;
+    padding-top: 80px; /* Espaço para a barra fixa */
   }
 
   .contadores {
@@ -2534,7 +2535,7 @@ function atualizarCoresEstantes() {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 2000;
   }
 
   .modal-content {
@@ -2686,7 +2687,7 @@ function atualizarCoresEstantes() {
     padding: 12px 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     font-size: 16px;
-    z-index: 2000;
+    z-index: 3000;
     animation: slideIn 0.3s ease-out;
   }
 
@@ -2867,6 +2868,14 @@ function atualizarCoresEstantes() {
     
     .logo-img {
       height: 40px;
+    }
+    
+    .header-center {
+      order: 3;
+    }
+    
+    .header-right {
+      order: 2;
     }
   }
 </style>
