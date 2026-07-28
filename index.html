@@ -60,15 +60,8 @@
       serverTimestamp,
       query,
       where,
-      getDocs,
-      updateDoc,
-      deleteDoc,
-      orderBy,
-      limit
+      getDocs 
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-    // Importar bcrypt.js para criptografia de senhas
-    import { hash, compare } from "https://cdn.skypack.dev/bcryptjs@2.4.3";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD3j7NdARKWfcyQcaG5dX6VAghuTfCMX68",
@@ -83,13 +76,14 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Função para migrar dados da estrutura antiga para a nova
+    // Função para migrar dados da estrutura antiga para a nova (CORRIGIDA)
     async function migrarDadosAntigos() {
       const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
       let totalMigrados = 0;
       
       for (const tipo of tipos) {
         try {
+          // Verificar se existe o documento antigo
           const docRef = doc(db, "estoque", `produtos_${tipo}`);
           const docSnap = await getDoc(docRef);
           
@@ -97,10 +91,13 @@
             const dadosAntigos = docSnap.data();
             const produtos = dadosAntigos.produtos || [];
             
+            // Migrar cada produto para a nova estrutura
             for (const produto of produtos) {
+              // Verificar se o produto já existe na nova estrutura
               const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
               const produtoSnap = await getDoc(produtoRef);
               
+              // Se não existir, salvar
               if (!produtoSnap.exists()) {
                 await setDoc(produtoRef, produto);
                 totalMigrados++;
@@ -117,14 +114,14 @@
       return totalMigrados;
     }
 
-    // Função para carregar todos os produtos de um tipo
+    // Função para carregar todos os produtos de um tipo (NOVA ESTRUTURA: cada produto é um documento)
     async function carregarProdutos(tipo) {
       try {
         const produtosCol = collection(db, `estoque_${tipo}`);
         const querySnapshot = await getDocs(produtosCol);
         const produtos = [];
         querySnapshot.forEach((doc) => {
-          if (!doc.data().excluido) {
+          if (!doc.data().excluido) { // Ignorar produtos excluídos
             produtos.push({ id: doc.id, ...doc.data() });
           }
         });
@@ -135,7 +132,7 @@
       }
     }
 
-    // Função para salvar um produto
+    // Função para salvar um produto (NOVA ESTRUTURA: cada produto é um documento)
     async function salvarProduto(produto, tipo) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
@@ -145,7 +142,7 @@
       }
     }
 
-    // Função para excluir um produto
+    // Função para excluir um produto (NOVA ESTRUTURA)
     async function excluirProduto(codigo, tipo) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, codigo);
@@ -155,8 +152,8 @@
       }
     }
 
-    // Função para atualizar quantidade com runTransaction
-    async function atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuario) {
+    // Função para atualizar quantidade com runTransaction (evita conflitos)
+    async function atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuario = "Administrador") {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, codigo);
         
@@ -170,8 +167,10 @@
           const produtoAtual = docSnap.data();
           const quantidadeAnterior = parseInt(produtoAtual.quantidade || 0);
           
+          // Atualizar a quantidade
           transaction.update(produtoRef, { quantidade: novaQuantidade });
           
+          // Registrar no histórico
           const historicoRef = collection(db, "historico");
           const novoHistorico = {
             data: serverTimestamp(),
@@ -181,7 +180,7 @@
             modelo: produtoAtual.modelo || "N/A",
             quantidadeAnterior: quantidadeAnterior,
             quantidadeNova: novaQuantidade,
-            tipo: novaQuantidade > quantidadeAnterior ? "Entrada" : "Saída",
+            tipo: "Atualização de Quantidade",
             usuario: usuario,
             modo: tipo
           };
@@ -195,13 +194,13 @@
       }
     }
 
-    // Função para observar mudanças em tempo real
+    // Função para observar mudanças em tempo real (NOVA ESTRUTURA)
     function observarMudancas(tipo, callback) {
       const produtosCol = collection(db, `estoque_${tipo}`);
       return onSnapshot(produtosCol, (querySnapshot) => {
         const produtos = [];
         querySnapshot.forEach((doc) => {
-          if (!doc.data().excluido) {
+          if (!doc.data().excluido) { // Ignorar produtos excluídos
             produtos.push({ id: doc.id, ...doc.data() });
           }
         });
@@ -209,29 +208,25 @@
       });
     }
 
-    // Função para carregar histórico (ordenado por data, mais recentes primeiro)
-    async function carregarHistorico(limite = 100) {
+    // Função para carregar histórico
+    async function carregarHistorico() {
       try {
         const historicoCol = collection(db, "historico");
-        const q = query(
-          historicoCol,
-          orderBy("data", "desc"),
-          limit(limite)
-        );
+        const q = query(historicoCol, where("data", ">=", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))); // Últimos 90 dias
         const querySnapshot = await getDocs(q);
         const historico = [];
         querySnapshot.forEach((doc) => {
           historico.push({ id: doc.id, ...doc.data() });
         });
-        return historico;
+        return historico.sort((a, b) => b.data.toDate() - a.data.toDate());
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);
         return [];
       }
     }
 
-    // Função para adicionar ao histórico
-    async function adicionarAoHistorico(operacao, usuario) {
+    // Função para adicionar ao histórico (para outras operações)
+    async function adicionarAoHistorico(operacao, usuario = "Administrador") {
       try {
         const historicoRef = collection(db, "historico");
         await addDoc(historicoRef, {
@@ -244,132 +239,6 @@
       }
     }
 
-    // Função para cadastrar usuário
-    async function cadastrarUsuario(email, nome, senha, nivel = "funcionario") {
-      try {
-        const usuariosCol = collection(db, "usuarios");
-        const usuarioRef = doc(usuariosCol, email);
-        
-        const senhaHash = await hash(senha, 10);
-        
-        await setDoc(usuarioRef, {
-          email: email,
-          nome: nome,
-          senha: senhaHash,
-          nivel: nivel,
-          dataCadastro: serverTimestamp()
-        });
-        
-        return true;
-      } catch (error) {
-        console.error("Erro ao cadastrar usuário:", error);
-        return false;
-      }
-    }
-
-    // Função para carregar usuários
-    async function carregarUsuarios() {
-      try {
-        const usuariosCol = collection(db, "usuarios");
-        const querySnapshot = await getDocs(usuariosCol);
-        const usuarios = [];
-        querySnapshot.forEach((doc) => {
-          usuarios.push({ id: doc.id, ...doc.data() });
-        });
-        return usuarios;
-      } catch (error) {
-        console.error("Erro ao carregar usuários:", error);
-        return [];
-      }
-    }
-
-    // Função para atualizar nome de usuário
-    async function atualizarNomeUsuario(email, novoNome) {
-      try {
-        const usuarioRef = doc(db, "usuarios", email);
-        await updateDoc(usuarioRef, { nome: novoNome });
-        return true;
-      } catch (error) {
-        console.error("Erro ao atualizar nome de usuário:", error);
-        return false;
-      }
-    }
-
-    // Função para excluir usuário
-    async function excluirUsuario(email) {
-      try {
-        const usuarioRef = doc(db, "usuarios", email);
-        await deleteDoc(usuarioRef);
-        return true;
-      } catch (error) {
-        console.error("Erro ao excluir usuário:", error);
-        return false;
-      }
-    }
-
-    // Função para fazer login
-    async function fazerLoginFirebase(email, senha) {
-      try {
-        const usuariosCol = collection(db, "usuarios");
-        const q = query(usuariosCol, where("email", "==", email));
-        const querySnapshot = await getDocs(q);
-        
-        if (querySnapshot.empty) {
-          return { sucesso: false, mensagem: "Usuário não encontrado!" };
-        }
-        
-        const usuarioDoc = querySnapshot.docs[0];
-        const usuario = usuarioDoc.data();
-        
-        const senhaCorreta = await compare(senha, usuario.senha);
-        
-        if (!senhaCorreta) {
-          return { sucesso: false, mensagem: "Senha incorreta!" };
-        }
-        
-        return { 
-          sucesso: true, 
-          usuario: {
-            email: usuario.email,
-            nome: usuario.nome,
-            nivel: usuario.nivel
-          }
-        };
-      } catch (error) {
-        console.error("Erro ao fazer login:", error);
-        return { sucesso: false, mensagem: "Erro ao fazer login!" };
-      }
-    }
-
-    // Função para solicitar recuperação de senha
-    async function solicitarRecuperacaoSenha(email) {
-      try {
-        const usuariosCol = collection(db, "usuarios");
-        const q = query(usuariosCol, where("email", "==", email));
-        const querySnapshot = await getDocs(q);
-        
-        if (querySnapshot.empty) {
-          return { sucesso: false, mensagem: "Email não encontrado!" };
-        }
-        
-        // Gerar uma senha temporária
-        const senhaTemporaria = Math.random().toString(36).substring(2, 10);
-        const senhaHash = await hash(senhaTemporaria, 10);
-        
-        const usuarioRef = doc(db, "usuarios", email);
-        await updateDoc(usuarioRef, { senha: senhaHash });
-        
-        return { 
-          sucesso: true, 
-          senhaTemporaria: senhaTemporaria,
-          mensagem: `Senha temporária gerada: ${senhaTemporaria}`
-        };
-      } catch (error) {
-        console.error("Erro ao solicitar recuperação de senha:", error);
-        return { sucesso: false, mensagem: "Erro ao solicitar recuperação!" };
-      }
-    }
-
     // Tornar as funções globais
     window.carregarProdutos = carregarProdutos;
     window.salvarProduto = salvarProduto;
@@ -379,69 +248,53 @@
     window.carregarHistorico = carregarHistorico;
     window.adicionarAoHistorico = adicionarAoHistorico;
     window.migrarDadosAntigos = migrarDadosAntigos;
-    window.cadastrarUsuario = cadastrarUsuario;
-    window.carregarUsuarios = carregarUsuarios;
-    window.atualizarNomeUsuario = atualizarNomeUsuario;
-    window.excluirUsuario = excluirUsuario;
-    window.fazerLoginFirebase = fazerLoginFirebase;
-    window.solicitarRecuperacaoSenha = solicitarRecuperacaoSenha;
   </script>
 </head>
 <body>
 
-<!-- Barra Superior Fixa -->
-<header class="header-fixo">
-  <div class="header-content">
-    <div class="header-left">
+<div class="app">
+
+  <header>
+    <div class="title">
       <img src="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" alt="Logo Mollibear" class="logo-img">
-      <span class="title-text">🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻</span>
+      <span>🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻</span>
     </div>
     
-    <div class="header-center">
-      <input type="text" id="buscaProdutoHeader" class="input-fofo" placeholder="🔍 Buscar produto..." style="width: 300px; margin: 0 10px;">
-      <select id="modoSelectHeader" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513; margin: 0 10px;">
-        <option value="sala_p">🗺️ Sala P</option>
+    <!-- Contadores Visuais -->
+    <div class="contadores" id="contadores">
+      <div class="contador">
+        <span>📦 <strong>Produtos:</strong> <span id="totalProdutos">0</span></span>
+      </div>
+      <div class="contador">
+        <span>📊 <strong>Quantidade Total:</strong> <span id="quantidadeTotal">0</span></span>
+      </div>
+      <div class="contador" id="contadorEstantes">
+        <span>🗺️ <strong>Estantes Utilizadas:</strong> <span id="estantesUtilizadas">0/51</span></span>
+      </div>
+      <div class="contador">
+        <button id="verHistoricoBtn" class="button-historico">📜 Histórico</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <select id="modoSelect" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513; margin-right: 10px;">
+        <option value="sala_p">🗺️ Sala P (com mapa)</option>
         <option value="estoque_g">📦 Estoque G</option>
         <option value="estoque_p">📦 Estoque P</option>
         <option value="estoque_m">📦 Estoque M</option>
       </select>
-      <button id="produtosCadastradosBtnHeader" class="button-fofo">📋 Produtos</button>
-      <button id="verHistoricoBtnHeader" class="button-fofo">📜 Histórico</button>
+      <button id="refreshBtn" class="button-fofo" title="Atualizar dados">🔄 Atualizar</button>
+      <button id="produtosCadastradosBtn" class="button-fofo">📋 Produtos Cadastrados</button>
+      <select id="ordenarPor" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513;">
+        <option value="codigo">🔽 Ordenar por Código</option>
+        <option value="descricao">🔽 Ordenar por Nome</option>
+        <option value="quantidade">🔽 Ordenar por Quantidade</option>
+        <option value="data">🔽 Ordenar por Data</option>
+      </select>
+      <button id="loginBtn" class="button-fofo" style="display: none;">🔑 Login</button>
+      <button id="logoutBtn" class="button-fofo" style="display: none;">🚪 Sair</button>
     </div>
-    
-    <div class="header-right">
-      <button id="notificacoesBtn" class="button-fofo" style="position: relative;">
-        🔔
-        <span id="contadorNotificacoes" class="contador-notificacoes" style="display: none;">0</span>
-      </button>
-      <button id="configuracoesBtn" class="button-fofo">⚙️ Configurações</button>
-      <div id="perfilUsuario" class="perfil-usuario" style="display: none;">
-        <span id="nomeUsuario">👤 Convidado</span>
-        <button id="logoutBtnHeader" class="button-fofo" style="margin-left: 10px;">🚪 Sair</button>
-      </div>
-      <button id="loginBtnHeader" class="button-fofo">🔑 Login</button>
-    </div>
-  </div>
-</header>
-
-<!-- Toast Notification -->
-<div id="toast" class="toast" style="display: none;"></div>
-
-<!-- Conteúdo Principal (com margin-top para não sobrepor a barra fixa) -->
-<div class="app">
-
-  <!-- Contadores Visuais -->
-  <div class="contadores" id="contadores">
-    <div class="contador">
-      <span>📦 <strong>Produtos:</strong> <span id="totalProdutos">0</span></span>
-    </div>
-    <div class="contador">
-      <span>📊 <strong>Quantidade Total:</strong> <span id="quantidadeTotal">0</span></span>
-    </div>
-    <div class="contador" id="contadorEstantes">
-      <span>🗺️ <strong>Estantes Utilizadas:</strong> <span id="estantesUtilizadas">0/51</span></span>
-    </div>
-  </div>
+  </header>
 
   <div class="content">
 
@@ -572,110 +425,17 @@
       <div id="loginModal" class="modal" style="display: none;">
         <div class="modal-content" style="width: 90%; max-width: 400px;">
           <span class="close-login">&times;</span>
-          <h2>🔑 Login</h2>
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
-          <input type="email" id="emailInput" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
+          <h2>🔑 Login de Administrador</h2>
           <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Senha:</label>
-          <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite sua senha" style="margin-top: 6px;">
-          <button class="button-fofo" id="esqueciSenhaBtn" style="margin-top: 10px; width: 100%; background-color: #fff3cd; color: #856404;">
-            🔑 Esqueci a senha
-          </button>
-          <button class="button-fofo" id="entrarBtn" style="margin-top: 10px; width: 100%;">🔓 Entrar</button>
-          <button class="button-fofo" id="cadastrarBtn" style="margin-top: 10px; width: 100%; background-color: #d4edda; color: #155724;">
-            👤 Criar Conta
-          </button>
+          <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite a senha" style="margin-top: 6px;">
+          <button class="button-fofo" id="entrarBtn" style="margin-top: 20px; width: 100%;">🔓 Entrar</button>
           <p id="erroLogin" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
         </div>
       </div>
 
-      <!-- Modal para Recuperação de Senha -->
-      <div id="recuperarSenhaModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 400px;">
-          <span class="close-recuperar-senha">&times;</span>
-          <h2>🔑 Recuperar Senha</h2>
-          <p style="text-align: center; color: #8b4513; margin-bottom: 15px;">
-            Digite seu email para receber uma senha temporária.
-          </p>
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
-          <input type="email" id="emailRecuperacao" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
-          <button class="button-fofo" id="solicitarRecuperacaoBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
-            📧 Enviar Senha Temporária
-          </button>
-          <p id="erroRecuperacao" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
-        </div>
-      </div>
-
-      <!-- Modal para Cadastro de Usuário -->
-      <div id="cadastroUsuarioModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 400px;">
-          <span class="close-cadastro-usuario">&times;</span>
-          <h2>👤 Criar Conta</h2>
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
-          <input type="email" id="novoEmail" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Nome:</label>
-          <input type="text" id="novoNome" class="input-fofo" placeholder="Digite seu nome" style="margin-top: 6px;">
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Senha:</label>
-          <input type="password" id="novaSenha" class="input-fofo" placeholder="Digite sua senha" style="margin-top: 6px;">
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Confirmar Senha:</label>
-          <input type="password" id="confirmarSenha" class="input-fofo" placeholder="Confirme sua senha" style="margin-top: 6px;">
-          <button class="button-fofo" id="criarContaBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
-            ✅ Criar Conta
-          </button>
-          <p id="erroCadastroUsuario" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
-        </div>
-      </div>
-
-      <!-- Modal para Gerenciamento de Usuários -->
-      <div id="gerenciarUsuariosModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 700px;">
-          <span class="close-usuarios">&times;</span>
-          <h2>👥 Gerenciamento de Usuários</h2>
-          
-          <!-- Formulário de Cadastro de Usuário -->
-          <div class="card" style="margin-bottom: 20px;">
-            <h3>📝 Cadastrar Novo Usuário</h3>
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-              <input type="email" id="novoEmailAdmin" class="input-fofo" placeholder="Email" style="flex: 1;">
-              <input type="text" id="novoNomeAdmin" class="input-fofo" placeholder="Nome de Usuário" style="flex: 1;">
-              <input type="password" id="novaSenhaAdmin" class="input-fofo" placeholder="Senha" style="flex: 1;">
-            </div>
-            <div style="margin-top: 10px;">
-              <select id="novoNivelAdmin" class="input-fofo" style="width: 100%;">
-                <option value="funcionario">Funcionário</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-            <button class="button-fofo" id="cadastrarUsuarioBtn" style="margin-top: 15px; width: 100%; background-color: #d4edda; color: #155724;">
-              ✅ Cadastrar Usuário
-            </button>
-            <p id="erroCadastroUsuarioAdmin" style="color: #d35f5f; margin-top: 8px; font-size: 16px;"></p>
-          </div>
-          
-          <!-- Lista de Usuários -->
-          <div class="card">
-            <h3>📋 Usuários Cadastrados</h3>
-            <div id="listaUsuarios" style="max-height: 300px; overflow-y: auto; margin-top: 10px;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modal para Editar Nome de Usuário -->
-      <div id="editarUsuarioModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 400px;">
-          <span class="close-editar-usuario">&times;</span>
-          <h2>✏️ Editar Nome de Usuário</h2>
-          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Novo Nome:</label>
-          <input type="text" id="novoNomeUsuario" class="input-fofo" placeholder="Digite o novo nome" style="margin-top: 6px;">
-          <button class="button-fofo" id="salvarNomeUsuarioBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
-            💾 Salvar
-          </button>
-          <p id="erroEditarUsuario" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
-        </div>
-      </div>
-
-      <!-- Modal para Histórico (Timeline) -->
+      <!-- Modal para Histórico -->
       <div id="historicoModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 800px; max-height: 85%;">
+        <div class="modal-content" style="width: 90%; max-width: 900px; max-height: 85%;">
           <span class="close-historico">&times;</span>
           <h2>📜 Histórico de Movimentações</h2>
           <div style="margin-bottom: 15px;">
@@ -686,32 +446,6 @@
         </div>
       </div>
 
-      <!-- Modal para Configurações -->
-      <div id="configuracoesModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 500px;">
-          <span class="close-configuracoes">&times;</span>
-          <h2>⚙️ Configurações</h2>
-          <div class="card">
-            <h3>👤 Minha Conta</h3>
-            <p><strong>Email:</strong> <span id="emailUsuarioConfig"></span></p>
-            <p><strong>Nome:</strong> <span id="nomeUsuarioConfig"></span></p>
-            <p><strong>Nível:</strong> <span id="nivelUsuarioConfig"></span></p>
-            <button class="button-fofo" id="editarPerfilBtn" style="margin-top: 15px; width: 100%; background-color: #e6d4f1;">
-              ✏️ Editar Perfil
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modal para Notificações -->
-      <div id="notificacoesModal" class="modal" style="display: none;">
-        <div class="modal-content" style="width: 90%; max-width: 500px; max-height: 70%;">
-          <span class="close-notificacoes">&times;</span>
-          <h2>🔔 Notificações</h2>
-          <div id="listaNotificacoes" style="max-height: 400px; overflow-y: auto;"></div>
-        </div>
-      </div>
-
     </main>
 
   </div>
@@ -719,6 +453,9 @@
 </div>
 
 <script>
+// Senha de administrador
+const SENHA_ADMIN = "mollibear123";
+
 // Variáveis globais
 let produtosSelecionados = [];
 let modoAtual = 'sala_p';
@@ -726,21 +463,8 @@ let unsubscribeFirestore = null;
 let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
-let usuarioLogado = null;
+let usuarioLogado = "";
 let migracaoConcluida = localStorage.getItem('migracao_concluida') === 'true';
-let notificacoes = [];
-
-// Função para mostrar toast
-function mostrarToast(mensagem, tipo = 'sucesso') {
-  const toast = document.getElementById('toast');
-  toast.textContent = mensagem;
-  toast.className = `toast ${tipo}`;
-  toast.style.display = 'block';
-  
-  setTimeout(() => {
-    toast.style.display = 'none';
-  }, 2000);
-}
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -748,86 +472,104 @@ function estaLogado() {
 }
 
 // Função para fazer login
-async function fazerLogin() {
-  const email = document.getElementById('emailInput').value.trim();
+function fazerLogin() {
   const senha = document.getElementById('senhaInput').value;
   const erroLogin = document.getElementById('erroLogin');
   
-  if (!email || !senha) {
-    erroLogin.textContent = '❌ Preencha email e senha!';
-    return;
+  if (senha === SENHA_ADMIN) {
+    localStorage.setItem('mollibear_logado', 'true');
+    usuarioLogado = "Administrador";
+    document.getElementById('loginModal').style.display = 'none';
+    document.getElementById('loginBtn').style.display = 'none';
+    document.getElementById('logoutBtn').style.display = 'block';
+    document.getElementById('asideCadastro').style.display = 'flex';
+    erroLogin.textContent = '';
+    alert('✅ Login realizado com sucesso!');
+    
+    // Executar migração se não foi feita ainda
+    if (!migracaoConcluida) {
+      executarMigracao();
+    } else {
+      iniciarListenerFirestore();
+    }
+  } else {
+    erroLogin.textContent = '❌ Senha incorreta!';
+  }
+}
+
+// Função para executar a migração
+async function executarMigracao() {
+  const notificacao = document.getElementById('notificacaoMigracao');
+  const contador = document.getElementById('contadorMigracao');
+  const progresso = document.getElementById('progressoMigracao');
+  
+  // Criar notificação se não existir
+  if (!notificacao) {
+    const divNotificacao = document.createElement('div');
+    divNotificacao.id = 'notificacaoMigracao';
+    divNotificacao.className = 'notificacao';
+    divNotificacao.innerHTML = `
+      <p>🔄 <strong>Migrando dados antigos para a nova estrutura...</strong> <span id="contadorMigracao">0</span> produtos migrados.</p>
+      <div class="barra-progresso">
+        <div id="progressoMigracao" class="progresso"></div>
+      </div>
+    `;
+    document.querySelector('header').insertBefore(divNotificacao, document.querySelector('.actions'));
   }
   
   try {
-    const resultado = await window.fazerLoginFirebase(email, senha);
+    const totalMigrados = await window.migrarDadosAntigos();
     
-    if (resultado.sucesso) {
-      localStorage.setItem('mollibear_logado', 'true');
-      usuarioLogado = resultado.usuario;
-      localStorage.setItem('mollibear_usuario', JSON.stringify(usuarioLogado));
-      
-      // Atualizar UI
-      document.getElementById('loginModal').style.display = 'none';
-      document.getElementById('loginBtnHeader').style.display = 'none';
-      document.getElementById('logoutBtnHeader').style.display = 'block';
-      document.getElementById('perfilUsuario').style.display = 'flex';
-      document.getElementById('asideCadastro').style.display = 'flex';
-      document.getElementById('nomeUsuario').textContent = `👤 ${usuarioLogado.nome}`;
-      document.getElementById('emailUsuarioConfig').textContent = usuarioLogado.email;
-      document.getElementById('nomeUsuarioConfig').textContent = usuarioLogado.nome;
-      document.getElementById('nivelUsuarioConfig').textContent = usuarioLogado.nivel === 'admin' ? 'Administrador' : 'Funcionário';
-      
-      // Mostrar botão de gerenciar usuários apenas para admin
-      if (usuarioLogado.nivel === 'admin') {
-        document.getElementById('gerenciarUsuariosBtn').style.display = 'block';
-      } else {
-        document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
-      }
-      
-      erroLogin.textContent = '';
-      
-      // Executar migração se não foi feita ainda
-      if (!migracaoConcluida) {
-        executarMigracao();
-      } else {
-        iniciarListenerFirestore();
-      }
-      
-      mostrarToast('✅ Login realizado com sucesso!');
-    } else {
-      erroLogin.textContent = resultado.mensagem;
+    // Atualizar contadores da notificação
+    if (document.getElementById('contadorMigracao')) {
+      document.getElementById('contadorMigracao').textContent = totalMigrados;
     }
+    if (document.getElementById('progressoMigracao')) {
+      document.getElementById('progressoMigracao').style.width = '100%';
+    }
+    
+    // Marcar migração como concluída
+    migracaoConcluida = true;
+    localStorage.setItem('migracao_concluida', 'true');
+    
+    // Remover notificação após 2 segundos
+    setTimeout(() => {
+      const notificacao = document.getElementById('notificacaoMigracao');
+      if (notificacao) {
+        notificacao.style.display = 'none';
+      }
+    }, 2000);
+    
+    // Iniciar listener após migração
+    iniciarListenerFirestore();
+    
   } catch (error) {
-    console.error("Erro ao fazer login:", error);
-    erroLogin.textContent = '❌ Erro ao fazer login!';
+    console.error("Erro na migração:", error);
+    const notificacao = document.getElementById('notificacaoMigracao');
+    if (notificacao) {
+      notificacao.style.display = 'none';
+    }
+    alert('❌ Erro durante a migração. Verifique o console para mais detalhes.');
   }
 }
 
 // Função para fazer logout
 function fazerLogout() {
   localStorage.removeItem('mollibear_logado');
-  localStorage.removeItem('mollibear_usuario');
-  usuarioLogado = null;
-  
-  document.getElementById('loginBtnHeader').style.display = 'block';
-  document.getElementById('logoutBtnHeader').style.display = 'none';
-  document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
-  document.getElementById('perfilUsuario').style.display = 'none';
+  usuarioLogado = "";
+  document.getElementById('loginBtn').style.display = 'block';
+  document.getElementById('logoutBtn').style.display = 'none';
   document.getElementById('asideCadastro').style.display = 'none';
-  document.getElementById('nomeUsuario').textContent = '👤 Convidado';
-  
+  alert('🚪 Você saiu do modo administrador.');
   if (unsubscribeFirestore) {
     unsubscribeFirestore();
     unsubscribeFirestore = null;
   }
-  
-  mostrarToast('🚪 Você saiu do sistema.');
 }
 
 // Função para abrir o modal de login
 function abrirModalLogin() {
   document.getElementById('loginModal').style.display = 'block';
-  document.getElementById('emailInput').value = '';
   document.getElementById('senhaInput').value = '';
   document.getElementById('erroLogin').textContent = '';
 }
@@ -837,154 +579,7 @@ function fecharModalLogin() {
   document.getElementById('loginModal').style.display = 'none';
 }
 
-// Função para executar a migração
-async function executarMigracao() {
-  const notificacao = document.getElementById('notificacaoMigracao');
-  
-  if (notificacao) {
-    notificacao.style.display = 'block';
-  }
-  
-  try {
-    const totalMigrados = await window.migrarDadosAntigos();
-    
-    migracaoConcluida = true;
-    localStorage.setItem('migracao_concluida', 'true');
-    
-    if (notificacao) {
-      setTimeout(() => {
-        notificacao.style.display = 'none';
-      }, 2000);
-    }
-    
-    iniciarListenerFirestore();
-    mostrarToast(`✅ Migração concluída! ${totalMigrados} produtos migrados.`);
-    
-  } catch (error) {
-    console.error("Erro na migração:", error);
-    if (notificacao) {
-      notificacao.style.display = 'none';
-    }
-    mostrarToast('❌ Erro durante a migração.', 'erro');
-  }
-}
-
-// Função para abrir modal de recuperação de senha
-function abrirModalRecuperarSenha() {
-  document.getElementById('loginModal').style.display = 'none';
-  document.getElementById('recuperarSenhaModal').style.display = 'block';
-  document.getElementById('emailRecuperacao').value = '';
-  document.getElementById('erroRecuperacao').textContent = '';
-}
-
-// Função para fechar modal de recuperação de senha
-function fecharModalRecuperarSenha() {
-  document.getElementById('recuperarSenhaModal').style.display = 'none';
-  document.getElementById('loginModal').style.display = 'block';
-}
-
-// Função para solicitar recuperação de senha
-async function solicitarRecuperacao() {
-  const email = document.getElementById('emailRecuperacao').value.trim();
-  const erroRecuperacao = document.getElementById('erroRecuperacao');
-  
-  if (!email) {
-    erroRecuperacao.textContent = '❌ Digite um email válido!';
-    return;
-  }
-  
-  try {
-    const resultado = await window.solicitarRecuperacaoSenha(email);
-    
-    if (resultado.sucesso) {
-      fecharModalRecuperarSenha();
-      alert(`📧 Senha temporária: ${resultado.senhaTemporaria}\n\nUse esta senha para fazer login e depois altere sua senha.`);
-      mostrarToast('📧 Senha temporária gerada!');
-    } else {
-      erroRecuperacao.textContent = resultado.mensagem;
-    }
-  } catch (error) {
-    console.error("Erro ao solicitar recuperação:", error);
-    erroRecuperacao.textContent = '❌ Erro ao solicitar recuperação!';
-  }
-}
-
-// Função para abrir modal de cadastro de usuário
-function abrirModalCadastroUsuario() {
-  document.getElementById('loginModal').style.display = 'none';
-  document.getElementById('cadastroUsuarioModal').style.display = 'block';
-  document.getElementById('novoEmail').value = '';
-  document.getElementById('novoNome').value = '';
-  document.getElementById('novaSenha').value = '';
-  document.getElementById('confirmarSenha').value = '';
-  document.getElementById('erroCadastroUsuario').textContent = '';
-}
-
-// Função para fechar modal de cadastro de usuário
-function fecharModalCadastroUsuario() {
-  document.getElementById('cadastroUsuarioModal').style.display = 'none';
-  document.getElementById('loginModal').style.display = 'block';
-}
-
-// Função para criar conta
-async function criarConta() {
-  const email = document.getElementById('novoEmail').value.trim();
-  const nome = document.getElementById('novoNome').value.trim();
-  const senha = document.getElementById('novaSenha').value;
-  const confirmarSenha = document.getElementById('confirmarSenha').value;
-  const erroCadastroUsuario = document.getElementById('erroCadastroUsuario');
-  
-  if (!email || !nome || !senha || !confirmarSenha) {
-    erroCadastroUsuario.textContent = '❌ Preencha todos os campos!';
-    return;
-  }
-  
-  if (senha !== confirmarSenha) {
-    erroCadastroUsuario.textContent = '❌ As senhas não coincidem!';
-    return;
-  }
-  
-  // Validar formato de email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    erroCadastroUsuario.textContent = '❌ Email inválido!';
-    return;
-  }
-  
-  // Verificar se o email já está cadastrado
-  const usuarios = await window.carregarUsuarios();
-  const emailJaExiste = usuarios.some(u => u.email === email);
-  
-  if (emailJaExiste) {
-    erroCadastroUsuario.textContent = '❌ Este email já está cadastrado!';
-    return;
-  }
-  
-  const sucesso = await window.cadastrarUsuario(email, nome, senha, 'funcionario');
-  
-  if (sucesso) {
-    fecharModalCadastroUsuario();
-    mostrarToast('✅ Conta criada com sucesso! Faça login.');
-    
-    // Abrir modal de login
-    abrirModalLogin();
-    document.getElementById('emailInput').value = email;
-  } else {
-    erroCadastroUsuario.textContent = '❌ Erro ao criar conta!';
-  }
-}
-
-// Função para formatar data para timeline
-function formatarDataTimeline(data) {
-  if (!data) return "--:--";
-  if (data instanceof Object && data.toDate) {
-    const date = data.toDate();
-    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  }
-  return "--:--";
-}
-
-// Função para formatar data completa
+// Função para formatar data
 function formatarData(data) {
   if (!data) return "Não informado";
   if (data instanceof Object && data.toDate) {
@@ -1049,14 +644,15 @@ function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox =
 // Função para salvar a quantidade editada (USANDO TRANSAÇÃO)
 async function salvarQuantidade(codigo, inputId, tipo) {
   if (!estaLogado()) {
-    mostrarToast('❌ Você não tem permissão para alterar quantidades!', 'erro');
+    alert('❌ Você não tem permissão para alterar quantidades!');
     return;
   }
   
   const novaQuantidade = parseInt(document.getElementById(inputId).value);
   
   if (isNaN(novaQuantidade) || novaQuantidade < 0) {
-    mostrarToast('❌ Insira uma quantidade válida (número positivo)!', 'erro');
+    alert('❌ Insira uma quantidade válida (número positivo)!');
+    // Reverter para o valor anterior
     const produtos = await window.carregarProdutos(tipo);
     const produto = produtos.find(p => p.codigo === codigo);
     if (produto) {
@@ -1065,50 +661,21 @@ async function salvarQuantidade(codigo, inputId, tipo) {
     return;
   }
   
-  const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado.nome);
+  // Usar transação para evitar conflitos
+  const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado);
   
   if (sucesso) {
-    mostrarToast('✅ Quantidade atualizada!');
-    adiconarNotificacao(`Quantidade de ${codigo} atualizada para ${novaQuantidade}`);
+    // Não mostrar alerta para não atrapalhar o fluxo
+    console.log('✅ Quantidade atualizada com sucesso!');
   } else {
-    mostrarToast('❌ Erro ao atualizar quantidade.', 'erro');
+    alert('❌ Erro ao atualizar quantidade. Tente novamente.');
+    // Reverter para o valor anterior
     const produtos = await window.carregarProdutos(tipo);
     const produto = produtos.find(p => p.codigo === codigo);
     if (produto) {
       document.getElementById(inputId).value = produto.quantidade || 0;
     }
   }
-}
-
-// Função para adiconar notificação
-function adiconarNotificacao(mensagem) {
-  notificacoes.unshift({
-    id: Date.now(),
-    mensagem: mensagem,
-    data: new Date(),
-    lida: false
-  });
-  
-  // Atualizar contador
-  const naoLidas = notificacoes.filter(n => !n.lida).length;
-  const contador = document.getElementById('contadorNotificacoes');
-  if (naoLidas > 0) {
-    contador.textContent = naoLidas;
-    contador.style.display = 'inline';
-  } else {
-    contador.style.display = 'none';
-  }
-  
-  // Salvar no localStorage (para persistência)
-  localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
-}
-
-// Função para marcar notificações como lidas
-function marcarNotificacoesComoLidas() {
-  notificacoes.forEach(n => n.lida = true);
-  const contador = document.getElementById('contadorNotificacoes');
-  contador.style.display = 'none';
-  localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
 }
 
 // Função para atualizar contadores
@@ -1204,8 +771,7 @@ function preencherSelectEstantes() {
 
 // Função para trocar entre Sala P e Estoques
 async function trocarModo() {
-  modoAtual = document.getElementById('modoSelectHeader').value;
-  document.getElementById('modoSelect').value = modoAtual;
+  modoAtual = document.getElementById('modoSelect').value;
   salvarModoAtual();
   
   if (unsubscribeFirestore) {
@@ -1354,7 +920,7 @@ async function filtrarProdutosModal(pagina = 1) {
 // Função para selecionar todos os produtos
 async function selecionarTodos() {
   if (!estaLogado()) {
-    mostrarToast('❌ Você não tem permissão para selecionar produtos!', 'erro');
+    alert('❌ Você não tem permissão para selecionar produtos!');
     return;
   }
   
@@ -1380,18 +946,18 @@ async function selecionarTodos() {
     }
   });
   
-  mostrarToast(`✅ ${produtosFiltrados.length} produtos selecionados!`);
+  alert(`✅ ${produtosFiltrados.length} produtos selecionados!`);
 }
 
 // Função para excluir produtos selecionados
 async function excluirSelecionados() {
   if (!estaLogado()) {
-    mostrarToast('❌ Você não tem permissão para excluir produtos!', 'erro');
+    alert('❌ Você não tem permissão para excluir produtos!');
     return;
   }
   
   if (produtosSelecionados.length === 0) {
-    mostrarToast('❌ Nenhum produto selecionado!', 'erro');
+    alert('❌ Nenhum produto selecionado!');
     return;
   }
   
@@ -1399,6 +965,7 @@ async function excluirSelecionados() {
     for (const produto of produtosSelecionados) {
       await window.excluirProduto(produto.codigo, modoAtual);
       
+      // Registrar no histórico
       await window.adicionarAoHistorico({
         tipo: "Exclusão",
         codigo: produto.codigo,
@@ -1407,14 +974,12 @@ async function excluirSelecionados() {
         modelo: produto.modelo || "N/A",
         quantidadeAnterior: produto.quantidade || 0,
         quantidadeNova: 0
-      }, usuarioLogado.nome);
-      
-      adiconarNotificacao(`Produto ${produto.codigo} excluído`);
+      }, usuarioLogado);
     }
     
     produtosSelecionados = [];
     await filtrarProdutosModal();
-    mostrarToast(`🗑️ ${produtosSelecionados.length} produtos excluídos!`);
+    alert(`🗑️ ${produtosSelecionados.length} produtos excluídos com sucesso!`);
   }
 }
 
@@ -1435,7 +1000,7 @@ function fecharModal() {
 // Função para salvar um novo produto
 async function salvarProduto() {
   if (!estaLogado()) {
-    mostrarToast('❌ Você não tem permissão para cadastrar produtos!', 'erro');
+    alert('❌ Você não tem permissão para cadastrar produtos!');
     return;
   }
   
@@ -1459,6 +1024,7 @@ async function salvarProduto() {
     return;
   }
   
+  // Verificar se o produto já existe
   const produtos = await window.carregarProdutos(modoAtual);
   const produtoJaExiste = produtos.some(produto => produto.codigo === codigo);
   
@@ -1487,6 +1053,7 @@ async function salvarProduto() {
   
   await window.salvarProduto(novoProduto, modoAtual);
   
+  // Registrar no histórico
   await window.adicionarAoHistorico({
     tipo: "Cadastro",
     codigo: codigo,
@@ -1495,11 +1062,9 @@ async function salvarProduto() {
     modelo: modelo,
     quantidadeAnterior: 0,
     quantidadeNova: parseInt(quantidade)
-  }, usuarioLogado.nome);
+  }, usuarioLogado);
   
-  mostrarToast('✅ Produto salvo com sucesso!');
-  adiconarNotificacao(`Produto ${codigo} cadastrado`);
-  
+  alert('💾 Produto salvo com sucesso!');
   erroCadastro.textContent = '';
   
   document.getElementById('codigoProduto').value = '';
@@ -1573,74 +1138,45 @@ function carregarModoAtual() {
   if (modoSalvo) {
     modoAtual = modoSalvo;
     document.getElementById('modoSelect').value = modoSalvo;
-    document.getElementById('modoSelectHeader').value = modoSalvo;
   }
 }
 
-// Função para exibir histórico (Timeline)
+// Função para exibir histórico
 async function exibirHistorico() {
   const modal = document.getElementById('historicoModal');
   const listaHistorico = document.getElementById('listaHistorico');
   
-  const historico = await window.carregarHistorico(100);
+  const historico = await window.carregarHistorico();
   
   if (historico.length === 0) {
     listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro no histórico!</p>';
   } else {
-    listaHistorico.innerHTML = '<div class="timeline">' +
-      historico.map(item => {
-        const hora = formatarDataTimeline(item.data);
-        const tipo = item.tipo;
-        const usuario = item.usuario || 'Desconhecido';
-        const codigo = item.codigo || 'N/A';
-        const descricao = item.descricao || 'N/A';
-        const quantidadeAnterior = item.quantidadeAnterior || 0;
-        const quantidadeNova = item.quantidadeNova || 0;
-        const diferenca = quantidadeNova - quantidadeAnterior;
-        const simbolo = diferenca >= 0 ? '+' : '';
-        
-        let corDiferenca = '#28a745'; // Verde para entrada
-        if (diferenca < 0) {
-          corDiferenca = '#dc3545'; // Vermelho para saída
-        } else if (tipo === 'Cadastro') {
-          corDiferenca = '#007bff'; // Azul para cadastro
-        } else if (tipo === 'Exclusão') {
-          corDiferenca = '#6c757d'; // Cinza para exclusão
-        }
-        
-        let acao;
-        if (tipo === 'Cadastro') {
-          acao = `Cadastro`;
-        } else if (tipo === 'Exclusão') {
-          acao = `Exclusão`;
-        } else if (diferenca > 0) {
-          acao = `Entrada`;
-        } else if (diferenca < 0) {
-          acao = `Saída`;
-        } else {
-          acao = `Atualização`;
-        }
-        
-        return `
-          <div class="timeline-item">
-            <div class="timeline-time">${hora}</div>
-            <div class="timeline-content">
-              <div class="timeline-header">
-                <strong>${usuario}</strong>
-                <span class="timeline-acao" style="color: ${corDiferenca}; margin-left: 10px;">${acao}</span>
-              </div>
-              <div class="timeline-details">
-                ${tipo !== 'Exclusão' ? `
-                  <span class="timeline-diferenca" style="color: ${corDiferenca}; font-weight: bold;">${simbolo}${Math.abs(diferenca)}</span>
-                ` : ''}
-                <span class="timeline-codigo">${codigo}</span>
-                ${descricao !== 'N/A' ? `<span class="timeline-descricao">- ${descricao}</span>` : ''}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('') +
-    '</div>';
+    listaHistorico.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
+      '<thead>' +
+        '<tr style="background-color: var(--bege-claro);">' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Data</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Tipo</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Código</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Descrição</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Anterior</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Nova</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Usuário</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        historico.map(item => `
+          <tr style="border-bottom: 1px solid #f5e6d3;">
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${formatarData(item.data)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.tipo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.codigo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.descricao}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeAnterior}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeNova}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.usuario}</td>
+          </tr>
+        `).join('') +
+      '</tbody>' +
+    '</table>';
   }
   
   modal.style.display = 'block';
@@ -1654,7 +1190,7 @@ function fecharModalHistorico() {
 // Função para buscar no histórico
 async function buscarNoHistorico() {
   const busca = document.getElementById('buscaHistorico').value.toLowerCase();
-  const historico = await window.carregarHistorico(100);
+  const historico = await window.carregarHistorico();
   const listaHistorico = document.getElementById('listaHistorico');
   
   const historicoFiltrado = historico.filter(item => 
@@ -1667,289 +1203,32 @@ async function buscarNoHistorico() {
   if (historicoFiltrado.length === 0) {
     listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro encontrado!</p>';
   } else {
-    listaHistorico.innerHTML = '<div class="timeline">' +
-      historicoFiltrado.map(item => {
-        const hora = formatarDataTimeline(item.data);
-        const tipo = item.tipo;
-        const usuario = item.usuario || 'Desconhecido';
-        const codigo = item.codigo || 'N/A';
-        const descricao = item.descricao || 'N/A';
-        const quantidadeAnterior = item.quantidadeAnterior || 0;
-        const quantidadeNova = item.quantidadeNova || 0;
-        const diferenca = quantidadeNova - quantidadeAnterior;
-        const simbolo = diferenca >= 0 ? '+' : '';
-        
-        let corDiferenca = '#28a745';
-        if (diferenca < 0) {
-          corDiferenca = '#dc3545';
-        } else if (tipo === 'Cadastro') {
-          corDiferenca = '#007bff';
-        } else if (tipo === 'Exclusão') {
-          corDiferenca = '#6c757d';
-        }
-        
-        let acao;
-        if (tipo === 'Cadastro') {
-          acao = `Cadastro`;
-        } else if (tipo === 'Exclusão') {
-          acao = `Exclusão`;
-        } else if (diferenca > 0) {
-          acao = `Entrada`;
-        } else if (diferenca < 0) {
-          acao = `Saída`;
-        } else {
-          acao = `Atualização`;
-        }
-        
-        return `
-          <div class="timeline-item">
-            <div class="timeline-time">${hora}</div>
-            <div class="timeline-content">
-              <div class="timeline-header">
-                <strong>${usuario}</strong>
-                <span class="timeline-acao" style="color: ${corDiferenca}; margin-left: 10px;">${acao}</span>
-              </div>
-              <div class="timeline-details">
-                ${tipo !== 'Exclusão' ? `
-                  <span class="timeline-diferenca" style="color: ${corDiferenca}; font-weight: bold;">${simbolo}${Math.abs(diferenca)}</span>
-                ` : ''}
-                <span class="timeline-codigo">${codigo}</span>
-                ${descricao !== 'N/A' ? `<span class="timeline-descricao">- ${descricao}</span>` : ''}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('') +
-    '</div>';
-  }
-}
-
-// Função para abrir modal de configurações
-function abrirModalConfiguracoes() {
-  if (!estaLogado()) {
-    mostrarToast('❌ Faça login para acessar as configurações!', 'erro');
-    return;
-  }
-  document.getElementById('configuracoesModal').style.display = 'block';
-}
-
-// Função para fechar modal de configurações
-function fecharModalConfiguracoes() {
-  document.getElementById('configuracoesModal').style.display = 'none';
-}
-
-// Função para abrir modal de notificações
-function abrirModalNotificacoes() {
-  if (!estaLogado()) {
-    mostrarToast('❌ Faça login para ver as notificações!', 'erro');
-    return;
-  }
-  
-  const modal = document.getElementById('notificacoesModal');
-  const listaNotificacoes = document.getElementById('listaNotificacoes');
-  
-  if (notificacoes.length === 0) {
-    listaNotificacoes.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🔔 Nenhuma notificação!</p>';
-  } else {
-    listaNotificacoes.innerHTML = notificacoes.map(notificacao => `
-      <div class="notificacao-item ${notificacao.lida ? 'lida' : 'nao-lida'}" onclick="marcarComoLida(${notificacao.id})">
-        <p>${notificacao.mensagem}</p>
-        <span class="notificacao-hora">${formatarDataTimeline(notificacao.data)}</span>
-      </div>
-    `).join('');
-  }
-  
-  modal.style.display = 'block';
-  marcarNotificacoesComoLidas();
-}
-
-// Função para fechar modal de notificações
-function fecharModalNotificacoes() {
-  document.getElementById('notificacoesModal').style.display = 'none';
-}
-
-// Função para marcar notificação como lida
-function marcarComoLida(id) {
-  const notificacao = notificacoes.find(n => n.id === id);
-  if (notificacao) {
-    notificacao.lida = true;
-    localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
-    
-    // Atualizar contador
-    const naoLidas = notificacoes.filter(n => !n.lida).length;
-    const contador = document.getElementById('contadorNotificacoes');
-    if (naoLidas > 0) {
-      contador.textContent = naoLidas;
-      contador.style.display = 'inline';
-    } else {
-      contador.style.display = 'none';
-    }
-  }
-}
-
-// Função para abrir modal de editar perfil
-function abrirModalEditarPerfil() {
-  fecharModalConfiguracoes();
-  abrirEditarUsuario(usuarioLogado.email, usuarioLogado.nome);
-}
-
-// Função para abrir modal de gerenciamento de usuários
-async function abrirGerenciarUsuarios() {
-  const modal = document.getElementById('gerenciarUsuariosModal');
-  modal.style.display = 'block';
-  
-  await listarUsuarios();
-}
-
-// Função para fechar modal de gerenciamento de usuários
-function fecharModalUsuarios() {
-  document.getElementById('gerenciarUsuariosModal').style.display = 'none';
-}
-
-// Função para listar usuários
-async function listarUsuarios() {
-  const listaUsuarios = document.getElementById('listaUsuarios');
-  const usuarios = await window.carregarUsuarios();
-  
-  if (usuarios.length === 0) {
-    listaUsuarios.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">👥 Nenhum usuário cadastrado!</p>';
-    return;
-  }
-  
-  listaUsuarios.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
-    '<thead>' +
-      '<tr style="background-color: var(--bege-claro);">' +
-        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Email</th>' +
-        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Nome</th>' +
-        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Nível</th>' +
-        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Ações</th>' +
-      '</tr>' +
-    '</thead>' +
-    '<tbody>' +
-      usuarios.map(usuario => `
-        <tr style="border-bottom: 1px solid #f5e6d3;">
-          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.email}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.nome}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.nivel === 'admin' ? 'Administrador' : 'Funcionário'}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">
-            <button class="button-fofo" onclick="abrirEditarUsuario('${usuario.email}', '${usuario.nome}')" style="padding: 6px 12px; font-size: 14px; margin-right: 5px;">✏️ Editar</button>
-            ${usuarioLogado.email !== usuario.email ? `
-              <button class="button-fofo" onclick="confirmarExcluirUsuario('${usuario.email}')" style="padding: 6px 12px; font-size: 14px; background-color: #f8c8c8; color: #721c24;">🗑️ Excluir</button>
-            ` : ''}
-          </td>
-        </tr>
-      `).join('') +
-    '</tbody>' +
-  '</table>';
-}
-
-// Função para abrir modal de editar usuário
-function abrirEditarUsuario(email, nomeAtual) {
-  document.getElementById('editarUsuarioModal').style.display = 'block';
-  document.getElementById('novoNomeUsuario').value = nomeAtual;
-  document.getElementById('editarUsuarioModal').dataset.email = email;
-}
-
-// Função para fechar modal de editar usuário
-function fecharModalEditarUsuario() {
-  document.getElementById('editarUsuarioModal').style.display = 'none';
-}
-
-// Função para salvar novo nome de usuário
-async function salvarNomeUsuario() {
-  const email = document.getElementById('editarUsuarioModal').dataset.email;
-  const novoNome = document.getElementById('novoNomeUsuario').value.trim();
-  const erroEditarUsuario = document.getElementById('erroEditarUsuario');
-  
-  if (!novoNome) {
-    erroEditarUsuario.textContent = '❌ Digite um nome válido!';
-    return;
-  }
-  
-  const sucesso = await window.atualizarNomeUsuario(email, novoNome);
-  
-  if (sucesso) {
-    fecharModalEditarUsuario();
-    mostrarToast('✅ Nome de usuário atualizado com sucesso!');
-    
-    // Atualizar o nome do usuário logado se for o próprio usuário
-    if (usuarioLogado && usuarioLogado.email === email) {
-      usuarioLogado.nome = novoNome;
-      document.getElementById('nomeUsuario').textContent = `👤 ${novoNome}`;
-      document.getElementById('nomeUsuarioConfig').textContent = novoNome;
-      localStorage.setItem('mollibear_usuario', JSON.stringify(usuarioLogado));
-    }
-    
-    // Atualizar a lista de usuários
-    await listarUsuarios();
-  } else {
-    erroEditarUsuario.textContent = '❌ Erro ao atualizar nome de usuário!';
-  }
-}
-
-// Função para confirmar exclusão de usuário
-function confirmarExcluirUsuario(email) {
-  if (confirm(`🐻 Tem certeza que deseja excluir o usuário ${email}?`)) {
-    excluirUsuario(email);
-  }
-}
-
-// Função para excluir usuário
-async function excluirUsuario(email) {
-  const sucesso = await window.excluirUsuario(email);
-  
-  if (sucesso) {
-    mostrarToast('✅ Usuário excluído com sucesso!');
-    await listarUsuarios();
-  } else {
-    mostrarToast('❌ Erro ao excluir usuário!', 'erro');
-  }
-}
-
-// Função para cadastrar novo usuário (Admin)
-async function cadastrarNovoUsuarioAdmin() {
-  const email = document.getElementById('novoEmailAdmin').value.trim();
-  const nome = document.getElementById('novoNomeAdmin').value.trim();
-  const senha = document.getElementById('novaSenhaAdmin').value;
-  const nivel = document.getElementById('novoNivelAdmin').value;
-  const erroCadastroUsuarioAdmin = document.getElementById('erroCadastroUsuarioAdmin');
-  
-  if (!email || !nome || !senha) {
-    erroCadastroUsuarioAdmin.textContent = '❌ Preencha todos os campos!';
-    return;
-  }
-  
-  // Validar formato de email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    erroCadastroUsuarioAdmin.textContent = '❌ Email inválido!';
-    return;
-  }
-  
-  // Verificar se o email já está cadastrado
-  const usuarios = await window.carregarUsuarios();
-  const emailJaExiste = usuarios.some(u => u.email === email);
-  
-  if (emailJaExiste) {
-    erroCadastroUsuarioAdmin.textContent = '❌ Este email já está cadastrado!';
-    return;
-  }
-  
-  const sucesso = await window.cadastrarUsuario(email, nome, senha, nivel);
-  
-  if (sucesso) {
-    mostrarToast('✅ Usuário cadastrado com sucesso!');
-    
-    // Limpar campos
-    document.getElementById('novoEmailAdmin').value = '';
-    document.getElementById('novoNomeAdmin').value = '';
-    document.getElementById('novaSenhaAdmin').value = '';
-    document.getElementById('novoNivelAdmin').value = 'funcionario';
-    
-    // Atualizar lista de usuários
-    await listarUsuarios();
-  } else {
-    erroCadastroUsuarioAdmin.textContent = '❌ Erro ao cadastrar usuário!';
+    listaHistorico.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
+      '<thead>' +
+        '<tr style="background-color: var(--bege-claro);">' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Data</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Tipo</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Código</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Descrição</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Anterior</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Qtd. Nova</th>' +
+          '<th style="padding: 10px; border: 1px solid #8b4513; text-align: left;">Usuário</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        historicoFiltrado.map(item => `
+          <tr style="border-bottom: 1px solid #f5e6d3;">
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${formatarData(item.data)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.tipo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.codigo}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.descricao}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeAnterior}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.quantidadeNova}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #f5e6d3;">${item.usuario}</td>
+          </tr>
+        `).join('') +
+      '</tbody>' +
+    '</table>';
   }
 }
 
@@ -2019,7 +1298,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('salvarProdutoBtn').addEventListener('click', salvarProduto);
   document.getElementById('buscaProduto').addEventListener('input', buscarProduto);
   document.getElementById('produtosCadastradosBtn').addEventListener('click', exibirProdutosCadastrados);
-  document.getElementById('produtosCadastradosBtnHeader').addEventListener('click', exibirProdutosCadastrados);
   document.querySelector('.close').addEventListener('click', fecharModal);
   document.getElementById('buscaProdutosModal').addEventListener('input', () => filtrarProdutosModal(1));
   document.getElementById('ordenarPor').addEventListener('change', () => {
@@ -2029,36 +1307,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelector('.close-estante').addEventListener('click', fecharModalEstante);
   document.getElementById('selecionarTodosBtn').addEventListener('click', selecionarTodos);
   document.getElementById('excluirSelecionadosBtn').addEventListener('click', excluirSelecionados);
-  document.getElementById('loginBtnHeader').addEventListener('click', abrirModalLogin);
-  document.getElementById('logoutBtnHeader').addEventListener('click', fazerLogout);
+  document.getElementById('loginBtn').addEventListener('click', abrirModalLogin);
+  document.getElementById('logoutBtn').addEventListener('click', fazerLogout);
   document.getElementById('entrarBtn').addEventListener('click', fazerLogin);
   document.querySelector('.close-login').addEventListener('click', fecharModalLogin);
   document.getElementById('modoSelect').addEventListener('change', trocarModo);
-  document.getElementById('modoSelectHeader').addEventListener('change', trocarModo);
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (modoAtual !== 'sala_p') exibirListaEstoque();
     else atualizarCoresEstantes();
   });
   document.getElementById('verHistoricoBtn').addEventListener('click', exibirHistorico);
-  document.getElementById('verHistoricoBtnHeader').addEventListener('click', exibirHistorico);
   document.querySelector('.close-historico').addEventListener('click', fecharModalHistorico);
   document.getElementById('buscarHistoricoBtn').addEventListener('click', buscarNoHistorico);
-  document.getElementById('gerenciarUsuariosBtn').addEventListener('click', abrirGerenciarUsuarios);
-  document.querySelector('.close-usuarios').addEventListener('click', fecharModalUsuarios);
-  document.getElementById('cadastrarUsuarioBtn').addEventListener('click', cadastrarNovoUsuarioAdmin);
-  document.querySelector('.close-editar-usuario').addEventListener('click', fecharModalEditarUsuario);
-  document.getElementById('salvarNomeUsuarioBtn').addEventListener('click', salvarNomeUsuario);
-  document.getElementById('esqueciSenhaBtn').addEventListener('click', abrirModalRecuperarSenha);
-  document.querySelector('.close-recuperar-senha').addEventListener('click', fecharModalRecuperarSenha);
-  document.getElementById('solicitarRecuperacaoBtn').addEventListener('click', solicitarRecuperacao);
-  document.getElementById('cadastrarBtn').addEventListener('click', abrirModalCadastroUsuario);
-  document.querySelector('.close-cadastro-usuario').addEventListener('click', fecharModalCadastroUsuario);
-  document.getElementById('criarContaBtn').addEventListener('click', criarConta);
-  document.getElementById('configuracoesBtn').addEventListener('click', abrirModalConfiguracoes);
-  document.querySelector('.close-configuracoes').addEventListener('click', fecharModalConfiguracoes);
-  document.getElementById('editarPerfilBtn').addEventListener('click', abrirModalEditarPerfil);
-  document.getElementById('notificacoesBtn').addEventListener('click', abrirModalNotificacoes);
-  document.querySelector('.close-notificacoes').addEventListener('click', fecharModalNotificacoes);
 
   // Inicializar o select de estantes
   preencherSelectEstantes();
@@ -2066,52 +1326,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Carregar o modo atual do localStorage
   carregarModoAtual();
 
-  // Carregar notificações do localStorage
-  const notificacoesSalvas = localStorage.getItem('mollibear_notificacoes');
-  if (notificacoesSalvas) {
-    notificacoes = JSON.parse(notificacoesSalvas);
-    const naoLidas = notificacoes.filter(n => !n.lida).length;
-    const contador = document.getElementById('contadorNotificacoes');
-    if (naoLidas > 0) {
-      contador.textContent = naoLidas;
-      contador.style.display = 'inline';
-    }
-  }
-
   // Verificar se o usuário já está logado
   if (estaLogado()) {
-    const usuarioSalvo = localStorage.getItem('mollibear_usuario');
-    if (usuarioSalvo) {
-      usuarioLogado = JSON.parse(usuarioSalvo);
-    }
-    
-    document.getElementById('loginBtnHeader').style.display = 'none';
-    document.getElementById('logoutBtnHeader').style.display = 'block';
-    document.getElementById('perfilUsuario').style.display = 'flex';
+    document.getElementById('loginBtn').style.display = 'none';
+    document.getElementById('logoutBtn').style.display = 'block';
     document.getElementById('asideCadastro').style.display = 'flex';
-    document.getElementById('nomeUsuario').textContent = `👤 ${usuarioLogado.nome}`;
-    document.getElementById('emailUsuarioConfig').textContent = usuarioLogado.email;
-    document.getElementById('nomeUsuarioConfig').textContent = usuarioLogado.nome;
-    document.getElementById('nivelUsuarioConfig').textContent = usuarioLogado.nivel === 'admin' ? 'Administrador' : 'Funcionário';
+    usuarioLogado = "Administrador";
     
-    if (usuarioLogado.nivel === 'admin') {
-      document.getElementById('gerenciarUsuariosBtn').style.display = 'block';
-    } else {
-      document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
-    }
-    
+    // Executar migração se não foi feita ainda
     if (!migracaoConcluida) {
       executarMigracao();
     } else {
       iniciarListenerFirestore();
     }
   } else {
-    document.getElementById('loginBtnHeader').style.display = 'block';
-    document.getElementById('logoutBtnHeader').style.display = 'none';
-    document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
-    document.getElementById('perfilUsuario').style.display = 'none';
+    document.getElementById('loginBtn').style.display = 'block';
+    document.getElementById('logoutBtn').style.display = 'none';
     document.getElementById('asideCadastro').style.display = 'none';
-    document.getElementById('nomeUsuario').textContent = '👤 Convidado';
   }
 });
 
@@ -2205,86 +1436,30 @@ function atualizarCoresEstantes() {
     font-size: 16px;
   }
 
-  /* Barra Superior Fixa */
-  .header-fixo {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: var(--bege-fundo);
-    border-bottom: 2px solid var(--bege-claro);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    padding: 10px 0;
-  }
-
-  .header-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .header-left, .header-center, .header-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .header-left {
-    flex: 1;
-  }
-
-  .header-center {
-    flex: 2;
-    justify-content: center;
-  }
-
-  .header-right {
-    flex: 1;
-    justify-content: flex-end;
-  }
-
-  .title-text {
-    font-size: 20px;
-    font-weight: bold;
-    color: var(--bege-escuro);
-  }
-
-  .logo-img {
-    height: 50px;
-    width: auto;
-    border-radius: 50%;
-    border: 2px solid var(--bege-escuro);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .perfil-usuario {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .contador-notificacoes {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: #dc3545;
-    color: white;
-    border-radius: 50%;
-    padding: 2px 6px;
-    font-size: 12px;
-    font-weight: bold;
-  }
-
-  /* Conteúdo principal com margin-top para não sobrepor a barra fixa */
   .app {
     max-width: 1400px;
     margin: 0 auto;
     padding: 10px;
-    padding-top: 80px; /* Espaço para a barra fixa */
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--bege-escuro);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    margin-bottom: 10px;
   }
 
   .contadores {
@@ -2351,6 +1526,14 @@ function atualizarCoresEstantes() {
     background-color: #ffc107;
     width: 0%;
     transition: width 0.5s;
+  }
+
+  .logo-img {
+    height: 60px;
+    width: auto;
+    border-radius: 50%;
+    border: 2px solid var(--bege-escuro);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .actions {
@@ -2432,16 +1615,12 @@ function atualizarCoresEstantes() {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 
-  .card h2, .card h3 {
+  .card h2 {
     margin-top: 0;
     font-size: 20px;
     color: var(--bege-escuro);
     border-bottom: 2px solid var(--bege-claro);
     padding-bottom: 10px;
-  }
-
-  .card h3 {
-    font-size: 18px;
   }
 
   .card label {
@@ -2535,7 +1714,7 @@ function atualizarCoresEstantes() {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 2000;
+    z-index: 1000;
   }
 
   .modal-content {
@@ -2557,14 +1736,14 @@ function atualizarCoresEstantes() {
     font-size: 22px;
   }
 
-  .close, .close-estante, .close-login, .close-historico, .close-usuarios, .close-editar-usuario, .close-recuperar-senha, .close-cadastro-usuario, .close-configuracoes, .close-notificacoes {
+  .close, .close-estante, .close-login, .close-historico {
     float: right;
     font-size: 28px;
     cursor: pointer;
     color: var(--bege-escuro);
   }
 
-  .close:hover, .close-estante:hover, .close-login:hover, .close-historico:hover, .close-usuarios:hover, .close-editar-usuario:hover, .close-recuperar-senha:hover, .close-cadastro-usuario:hover, .close-configuracoes:hover, .close-notificacoes:hover {
+  .close:hover, .close-estante:hover, .close-login:hover, .close-historico:hover {
     color: #ff6b6b;
   }
 
@@ -2583,11 +1762,7 @@ function atualizarCoresEstantes() {
     font-weight: bold;
   }
 
-  input[type="date"],
-  input[type="email"],
-  input[type="password"],
-  input[type="text"],
-  input[type="number"] {
+  input[type="date"] {
     padding: 10px;
     border: 2px solid var(--bege-claro);
     border-radius: 8px;
@@ -2599,12 +1774,14 @@ function atualizarCoresEstantes() {
 
   input[type="number"] {
     padding: 6px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
   }
 
-  input[type="number"]:focus,
-  input[type="email"]:focus,
-  input[type="password"]:focus,
-  input[type="text"]:focus {
+  input[type="number"]:focus {
     border-color: var(--bege-escuro);
     outline: none;
   }
@@ -2676,153 +1853,6 @@ function atualizarCoresEstantes() {
     background-color: rgba(245, 230, 211, 0.3);
   }
 
-  /* Toast Notification */
-  .toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: #fff;
-    border: 2px solid var(--bege-escuro);
-    border-radius: 8px;
-    padding: 12px 20px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    font-size: 16px;
-    z-index: 3000;
-    animation: slideIn 0.3s ease-out;
-  }
-
-  .toast.sucesso {
-    background: #d4edda;
-    color: #155724;
-    border-color: #28a745;
-  }
-
-  .toast.erro {
-    background: #f8d7da;
-    color: #721c24;
-    border-color: #dc3545;
-  }
-
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
-  }
-
-  /* Timeline */
-  .timeline {
-    position: relative;
-    padding-left: 30px;
-    list-style: none;
-  }
-
-  .timeline:before {
-    content: '';
-    position: absolute;
-    left: 10px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--bege-escuro);
-  }
-
-  .timeline-item {
-    position: relative;
-    padding-bottom: 20px;
-    padding-left: 20px;
-  }
-
-  .timeline-item:before {
-    content: '';
-    position: absolute;
-    left: -30px;
-    top: 5px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--bege-escuro);
-    border: 2px solid #fff;
-  }
-
-  .timeline-time {
-    font-size: 14px;
-    color: #6c757d;
-    margin-bottom: 5px;
-  }
-
-  .timeline-content {
-    background: var(--bege-fundo);
-    border: 1px solid var(--bege-claro);
-    border-radius: 8px;
-    padding: 12px;
-    margin-left: 10px;
-  }
-
-  .timeline-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 5px;
-  }
-
-  .timeline-acao {
-    font-size: 14px;
-    font-weight: bold;
-  }
-
-  .timeline-details {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .timeline-diferenca {
-    font-size: 16px;
-  }
-
-  .timeline-codigo {
-    font-weight: bold;
-    color: var(--bege-escuro);
-  }
-
-  .timeline-descricao {
-    font-size: 14px;
-    color: #6c757d;
-  }
-
-  /* Notificações */
-  .notificacao-item {
-    padding: 12px;
-    border-bottom: 1px solid var(--bege-claro);
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .notificacao-item:hover {
-    background: rgba(245, 230, 211, 0.3);
-  }
-
-  .notificacao-item.nao-lida {
-    background: rgba(253, 230, 138, 0.2);
-    font-weight: bold;
-  }
-
-  .notificacao-item.lida {
-    opacity: 0.8;
-  }
-
-  .notificacao-hora {
-    font-size: 12px;
-    color: #6c757d;
-    display: block;
-    margin-top: 5px;
-  }
-
   /* Media Queries para responsividade */
   @media (min-width: 768px) {
     .content {
@@ -2837,8 +1867,21 @@ function atualizarCoresEstantes() {
       flex: 1;
     }
     
-    .header-center {
-      flex: 3;
+    header {
+      flex-direction: column;
+    }
+    
+    .title {
+      font-size: 28px;
+      justify-content: center;
+    }
+    
+    .contadores {
+      justify-content: center;
+    }
+    
+    .actions {
+      justify-content: center;
     }
     
     .mapa-container {
@@ -2847,35 +1890,6 @@ function atualizarCoresEstantes() {
     
     .mapa {
       min-width: auto;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .header-content {
-      flex-direction: column;
-      gap: 10px;
-    }
-    
-    .header-left, .header-center, .header-right {
-      flex: 1;
-      width: 100%;
-      justify-content: center;
-    }
-    
-    .title-text {
-      font-size: 18px;
-    }
-    
-    .logo-img {
-      height: 40px;
-    }
-    
-    .header-center {
-      order: 3;
-    }
-    
-    .header-right {
-      order: 2;
     }
   }
 </style>
