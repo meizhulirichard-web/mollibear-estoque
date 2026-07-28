@@ -9,7 +9,7 @@
   <link rel="icon" href="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" type="image/png">
   
   <!-- Meta Tags para PWA -->
-  <meta name="theme-color" content="#fff8f0">
+  <meta name="theme-color" content="#fffaf0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mollibear Estoque">
@@ -29,8 +29,8 @@
     \"description\": \"Sistema de Estoque da Mollibear\",
     \"start_url\": \"/\",
     \"display\": \"standalone\",
-    \"background_color\": \"#fff8f0\",
-    \"theme_color\": \"#ff9a8b\",
+    \"background_color\": \"#fffaf0\",
+    \"theme_color\": \"#8b4513\",
     \"icons\": [
       {
         \"src\": \"https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true\",
@@ -60,8 +60,15 @@
       serverTimestamp,
       query,
       where,
-      getDocs 
+      getDocs,
+      updateDoc,
+      deleteDoc,
+      orderBy,
+      limit
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Importar bcrypt.js para criptografia de senhas
+    import { hash, compare } from "https://cdn.skypack.dev/bcryptjs@2.4.3";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD3j7NdARKWfcyQcaG5dX6VAghuTfCMX68",
@@ -76,7 +83,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Função para migrar dados da estrutura antiga para a nova (CORRIGIDA)
+    // Função para migrar dados da estrutura antiga para a nova
     async function migrarDadosAntigos() {
       const tipos = ['sala_p', 'estoque_g', 'estoque_p', 'estoque_m'];
       let totalMigrados = 0;
@@ -99,15 +106,18 @@
                 totalMigrados++;
               }
             }
+            
             console.log(`✅ Migrados ${produtos.length} produtos de ${tipo}`);
           }
         } catch (error) {
           console.error(`❌ Erro ao migrar dados de ${tipo}:`, error);
         }
       }
+      
       return totalMigrados;
     }
 
+    // Função para carregar todos os produtos de um tipo
     async function carregarProdutos(tipo) {
       try {
         const produtosCol = collection(db, `estoque_${tipo}`);
@@ -125,6 +135,7 @@
       }
     }
 
+    // Função para salvar um produto
     async function salvarProduto(produto, tipo) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, produto.codigo);
@@ -134,6 +145,7 @@
       }
     }
 
+    // Função para excluir um produto
     async function excluirProduto(codigo, tipo) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, codigo);
@@ -143,17 +155,25 @@
       }
     }
 
-    async function atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuario = "Administrador") {
+    // Função para atualizar quantidade com runTransaction
+    async function atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuario) {
       try {
         const produtoRef = doc(db, `estoque_${tipo}`, codigo);
+        
         await runTransaction(db, async (transaction) => {
           const docSnap = await transaction.get(produtoRef);
-          if (!docSnap.exists()) throw "Produto não encontrado!";
+          
+          if (!docSnap.exists()) {
+            throw "Produto não encontrado!";
+          }
+          
           const produtoAtual = docSnap.data();
           const quantidadeAnterior = parseInt(produtoAtual.quantidade || 0);
+          
           transaction.update(produtoRef, { quantidade: novaQuantidade });
+          
           const historicoRef = collection(db, "historico");
-          transaction.add(historicoRef, {
+          const novoHistorico = {
             data: serverTimestamp(),
             codigo: codigo,
             descricao: produtoAtual.descricao || "N/A",
@@ -161,11 +181,13 @@
             modelo: produtoAtual.modelo || "N/A",
             quantidadeAnterior: quantidadeAnterior,
             quantidadeNova: novaQuantidade,
-            tipo: "Atualização de Quantidade",
+            tipo: novaQuantidade > quantidadeAnterior ? "Entrada" : "Saída",
             usuario: usuario,
             modo: tipo
-          });
+          };
+          transaction.add(historicoRef, novoHistorico);
         });
+        
         return true;
       } catch (error) {
         console.error("Erro na transação:", error);
@@ -173,6 +195,7 @@
       }
     }
 
+    // Função para observar mudanças em tempo real
     function observarMudancas(tipo, callback) {
       const produtosCol = collection(db, `estoque_${tipo}`);
       return onSnapshot(produtosCol, (querySnapshot) => {
@@ -186,23 +209,29 @@
       });
     }
 
-    async function carregarHistorico() {
+    // Função para carregar histórico (ordenado por data, mais recentes primeiro)
+    async function carregarHistorico(limite = 100) {
       try {
         const historicoCol = collection(db, "historico");
-        const q = query(historicoCol, where("data", ">=", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)));
+        const q = query(
+          historicoCol,
+          orderBy("data", "desc"),
+          limit(limite)
+        );
         const querySnapshot = await getDocs(q);
         const historico = [];
         querySnapshot.forEach((doc) => {
           historico.push({ id: doc.id, ...doc.data() });
         });
-        return historico.sort((a, b) => b.data.toDate() - a.data.toDate());
+        return historico;
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);
         return [];
       }
     }
 
-    async function adicionarAoHistorico(operacao, usuario = "Administrador") {
+    // Função para adicionar ao histórico
+    async function adicionarAoHistorico(operacao, usuario) {
       try {
         const historicoRef = collection(db, "historico");
         await addDoc(historicoRef, {
@@ -215,6 +244,133 @@
       }
     }
 
+    // Função para cadastrar usuário
+    async function cadastrarUsuario(email, nome, senha, nivel = "funcionario") {
+      try {
+        const usuariosCol = collection(db, "usuarios");
+        const usuarioRef = doc(usuariosCol, email);
+        
+        const senhaHash = await hash(senha, 10);
+        
+        await setDoc(usuarioRef, {
+          email: email,
+          nome: nome,
+          senha: senhaHash,
+          nivel: nivel,
+          dataCadastro: serverTimestamp()
+        });
+        
+        return true;
+      } catch (error) {
+        console.error("Erro ao cadastrar usuário:", error);
+        return false;
+      }
+    }
+
+    // Função para carregar usuários
+    async function carregarUsuarios() {
+      try {
+        const usuariosCol = collection(db, "usuarios");
+        const querySnapshot = await getDocs(usuariosCol);
+        const usuarios = [];
+        querySnapshot.forEach((doc) => {
+          usuarios.push({ id: doc.id, ...doc.data() });
+        });
+        return usuarios;
+      } catch (error) {
+        console.error("Erro ao carregar usuários:", error);
+        return [];
+      }
+    }
+
+    // Função para atualizar nome de usuário
+    async function atualizarNomeUsuario(email, novoNome) {
+      try {
+        const usuarioRef = doc(db, "usuarios", email);
+        await updateDoc(usuarioRef, { nome: novoNome });
+        return true;
+      } catch (error) {
+        console.error("Erro ao atualizar nome de usuário:", error);
+        return false;
+      }
+    }
+
+    // Função para excluir usuário
+    async function excluirUsuario(email) {
+      try {
+        const usuarioRef = doc(db, "usuarios", email);
+        await deleteDoc(usuarioRef);
+        return true;
+      } catch (error) {
+        console.error("Erro ao excluir usuário:", error);
+        return false;
+      }
+    }
+
+    // Função para fazer login
+    async function fazerLoginFirebase(email, senha) {
+      try {
+        const usuariosCol = collection(db, "usuarios");
+        const q = query(usuariosCol, where("email", "==", email));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          return { sucesso: false, mensagem: "Usuário não encontrado!" };
+        }
+        
+        const usuarioDoc = querySnapshot.docs[0];
+        const usuario = usuarioDoc.data();
+        
+        const senhaCorreta = await compare(senha, usuario.senha);
+        
+        if (!senhaCorreta) {
+          return { sucesso: false, mensagem: "Senha incorreta!" };
+        }
+        
+        return { 
+          sucesso: true, 
+          usuario: {
+            email: usuario.email,
+            nome: usuario.nome,
+            nivel: usuario.nivel
+          }
+        };
+      } catch (error) {
+        console.error("Erro ao fazer login:", error);
+        return { sucesso: false, mensagem: "Erro ao fazer login!" };
+      }
+    }
+
+    // Função para solicitar recuperação de senha
+    async function solicitarRecuperacaoSenha(email) {
+      try {
+        const usuariosCol = collection(db, "usuarios");
+        const q = query(usuariosCol, where("email", "==", email));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+          return { sucesso: false, mensagem: "Email não encontrado!" };
+        }
+        
+        // Gerar uma senha temporária
+        const senhaTemporaria = Math.random().toString(36).substring(2, 10);
+        const senhaHash = await hash(senhaTemporaria, 10);
+        
+        const usuarioRef = doc(db, "usuarios", email);
+        await updateDoc(usuarioRef, { senha: senhaHash });
+        
+        return { 
+          sucesso: true, 
+          senhaTemporaria: senhaTemporaria,
+          mensagem: `Senha temporária gerada: ${senhaTemporaria}`
+        };
+      } catch (error) {
+        console.error("Erro ao solicitar recuperação de senha:", error);
+        return { sucesso: false, mensagem: "Erro ao solicitar recuperação!" };
+      }
+    }
+
+    // Tornar as funções globais
     window.carregarProdutos = carregarProdutos;
     window.salvarProduto = salvarProduto;
     window.excluirProduto = excluirProduto;
@@ -223,292 +379,368 @@
     window.carregarHistorico = carregarHistorico;
     window.adicionarAoHistorico = adicionarAoHistorico;
     window.migrarDadosAntigos = migrarDadosAntigos;
+    window.cadastrarUsuario = cadastrarUsuario;
+    window.carregarUsuarios = carregarUsuarios;
+    window.atualizarNomeUsuario = atualizarNomeUsuario;
+    window.excluirUsuario = excluirUsuario;
+    window.fazerLoginFirebase = fazerLoginFirebase;
+    window.solicitarRecuperacaoSenha = solicitarRecuperacaoSenha;
   </script>
-  
-  <!-- Font Awesome para ícones -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-<div class="app">
-
-  <header>
-    <div class="header-content">
-      <div class="logo-title">
-        <img src="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" alt="Logo Mollibear" class="logo-img">
-        <div class="title-text">
-          <h1>🧸 Mollibear Estoque</h1>
-          <p>Sistema de Gestão de Produtos</p>
-        </div>
-      </div>
-      
-      <div class="header-actions">
-        <div class="contadores">
-          <div class="contador">
-            <i class="fas fa-box"></i>
-            <div class="contador-info">
-              <span>Produtos</span>
-              <strong id="totalProdutos">0</strong>
-            </div>
-          </div>
-          <div class="contador">
-            <i class="fas fa-chart-bar"></i>
-            <div class="contador-info">
-              <span>Quantidade</span>
-              <strong id="quantidadeTotal">0</strong>
-            </div>
-          </div>
-          <div class="contador" id="contadorEstantes">
-            <i class="fas fa-map-marked-alt"></i>
-            <div class="contador-info">
-              <span>Estantes</span>
-              <strong id="estantesUtilizadas">0/51</strong>
-            </div>
-          </div>
-        </div>
-        
-        <div class="user-actions">
-          <select id="modoSelect" class="select-fofo">
-            <option value="sala_p">🗺️ Sala P</option>
-            <option value="estoque_g">📦 Estoque G</option>
-            <option value="estoque_p">📦 Estoque P</option>
-            <option value="estoque_m">📦 Estoque M</option>
-          </select>
-          <button id="refreshBtn" class="btn btn-secondary" title="Atualizar dados">
-            <i class="fas fa-sync-alt"></i> Atualizar
-          </button>
-          <button id="produtosCadastradosBtn" class="btn btn-primary">
-            <i class="fas fa-list"></i> Todos os Produtos
-          </button>
-          <button id="verHistoricoBtn" class="btn btn-info">
-            <i class="fas fa-history"></i> Histórico
-          </button>
-          <button id="loginBtn" class="btn btn-login" style="display: none;">
-            <i class="fas fa-lock"></i> Login
-          </button>
-          <button id="logoutBtn" class="btn btn-logout" style="display: none;">
-            <i class="fas fa-sign-out-alt"></i> Sair
-          </button>
-        </div>
-      </div>
+<!-- Barra Superior Fixa -->
+<header class="header-fixo">
+  <div class="header-content">
+    <div class="header-left">
+      <img src="https://github.com/meizhulirichard-web/mollibear-estoque/blob/main/mollibear%20logo.png?raw=true" alt="Logo Mollibear" class="logo-img">
+      <span class="title-text">🧸 SISTEMA DE ESTOQUE - MOLLIBEAR 🐻</span>
     </div>
     
-    <!-- Notificação de Migração -->
-    <div id="notificacaoMigracao" class="notificacao" style="display: none;">
-      <p><i class="fas fa-exchange-alt"></i> <strong>Migrando dados...</strong> <span id="contadorMigracao">0</span> produtos</p>
-      <div class="barra-progresso">
-        <div id="progressoMigracao" class="progresso"></div>
-      </div>
+    <div class="header-center">
+      <input type="text" id="buscaProdutoHeader" class="input-fofo" placeholder="🔍 Buscar produto..." style="width: 300px; margin: 0 10px;">
+      <select id="modoSelectHeader" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513; margin: 0 10px;">
+        <option value="sala_p">🗺️ Sala P</option>
+        <option value="estoque_g">📦 Estoque G</option>
+        <option value="estoque_p">📦 Estoque P</option>
+        <option value="estoque_m">📦 Estoque M</option>
+      </select>
+      <button id="produtosCadastradosBtnHeader" class="button-fofo">📋 Produtos</button>
+      <button id="verHistoricoBtnHeader" class="button-fofo">📜 Histórico</button>
     </div>
-  </header>
+    
+    <div class="header-right">
+      <button id="notificacoesBtn" class="button-fofo" style="position: relative;">
+        🔔
+        <span id="contadorNotificacoes" class="contador-notificacoes" style="display: none;">0</span>
+      </button>
+      <button id="configuracoesBtn" class="button-fofo">⚙️ Configurações</button>
+      <div id="perfilUsuario" class="perfil-usuario" style="display: none;">
+        <span id="nomeUsuario">👤 Convidado</span>
+        <button id="logoutBtnHeader" class="button-fofo" style="margin-left: 10px;">🚪 Sair</button>
+      </div>
+      <button id="loginBtnHeader" class="button-fofo">🔑 Login</button>
+    </div>
+  </div>
+</header>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast" style="display: none;"></div>
+
+<!-- Conteúdo Principal (com margin-top para não sobrepor a barra fixa) -->
+<div class="app">
+
+  <!-- Contadores Visuais -->
+  <div class="contadores" id="contadores">
+    <div class="contador">
+      <span>📦 <strong>Produtos:</strong> <span id="totalProdutos">0</span></span>
+    </div>
+    <div class="contador">
+      <span>📊 <strong>Quantidade Total:</strong> <span id="quantidadeTotal">0</span></span>
+    </div>
+    <div class="contador" id="contadorEstantes">
+      <span>🗺️ <strong>Estantes Utilizadas:</strong> <span id="estantesUtilizadas">0/51</span></span>
+    </div>
+  </div>
 
   <div class="content">
 
-    <aside id="asideCadastro" class="sidebar">
+    <aside id="asideCadastro">
+
       <div class="card">
-        <div class="card-header">
-          <h2><i class="fas fa-plus-circle"></i> Cadastrar Produto</h2>
+        <h2>📦 CADASTRO DE PRODUTO</h2>
+
+        <label>Código do Produto *</label>
+        <input type="text" id="codigoProduto" class="input-fofo" placeholder="Ex: TB001">
+
+        <label>Descrição *</label>
+        <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
+
+        <label>Cor (Não obrigatório)</label>
+        <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco, Rosa">
+
+        <label>Modelo *</label>
+        <input type="text" id="modeloProduto" class="input-fofo" placeholder="Ex: Grande, Médio, Pequeno">
+
+        <label>Quantidade *</label>
+        <input type="number" id="quantidadeProduto" class="input-fofo" min="0">
+
+        <label>Data de Lançamento (Não obrigatório)</label>
+        <input type="date" id="dataLancamento" class="input-fofo">
+
+        <div class="row" id="estanteNivelRow">
+          <div>
+            <label>Estante *</label>
+            <select id="estanteSelect" class="input-fofo"></select>
+          </div>
+
+          <div>
+            <label>Nível *</label>
+            <select id="nivelSelect" class="input-fofo">
+              <option>A</option>
+              <option>B</option>
+              <option>C</option>
+              <option>D</option>
+              <option>E</option>
+            </select>
+          </div>
         </div>
-        <div class="card-body">
-          <div class="form-group">
-            <label><i class="fas fa-barcode"></i> Código *</label>
-            <input type="text" id="codigoProduto" class="input-fofo" placeholder="Ex: TB001">
-          </div>
-          
-          <div class="form-group">
-            <label><i class="fas fa-tag"></i> Descrição *</label>
-            <input type="text" id="descricaoProduto" class="input-fofo" placeholder="Ex: Ursinho de Pelúcia">
-          </div>
-          
-          <div class="form-group">
-            <label><i class="fas fa-palette"></i> Cor</label>
-            <input type="text" id="corProduto" class="input-fofo" placeholder="Ex: Marrom, Branco">
-          </div>
-          
-          <div class="form-group">
-            <label><i class="fas fa-cube"></i> Modelo *</label>
-            <input type="text" id="modeloProduto" class="input-fofo" placeholder="Ex: Grande, Médio">
-          </div>
-          
-          <div class="form-group">
-            <label><i class="fas fa-hashtag"></i> Quantidade *</label>
-            <input type="number" id="quantidadeProduto" class="input-fofo" min="0" placeholder="0">
-          </div>
-          
-          <div class="form-group">
-            <label><i class="fas fa-calendar-alt"></i> Data de Lançamento</label>
-            <input type="date" id="dataLancamento" class="input-fofo">
-          </div>
-          
-          <div class="form-row" id="estanteNivelRow">
-            <div class="form-group">
-              <label><i class="fas fa-map-marker-alt"></i> Estante *</label>
-              <select id="estanteSelect" class="input-fofo"></select>
-            </div>
-            <div class="form-group">
-              <label><i class="fas fa-layer-group"></i> Nível *</label>
-              <select id="nivelSelect" class="input-fofo">
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
-              </select>
-            </div>
-          </div>
-          
-          <button id="salvarProdutoBtn" class="btn btn-success btn-block">
-            <i class="fas fa-save"></i> Salvar Produto
-          </button>
-          <p id="erroCadastro" class="erro-message"></p>
-        </div>
+
+        <button class="save button-fofo" id="salvarProdutoBtn">
+          💾 Salvar Produto
+        </button>
+        <p id="erroCadastro" style="color: #d35f5f; margin-top: 8px; font-size: 16px;"></p>
       </div>
 
       <div class="card">
-        <div class="card-header">
-          <h2><i class="fas fa-search"></i> Buscar Produto</h2>
-        </div>
-        <div class="card-body">
-          <input type="text" id="buscaProduto" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo...">
-          <div class="result" id="resultadoBusca"></div>
-        </div>
+        <h2>🔍 BUSCAR PRODUTO</h2>
+
+        <input type="text" id="buscaProduto" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo">
+
+        <div class="result" id="resultadoBusca"></div>
       </div>
+
     </aside>
 
-    <main class="main-content">
+    <main>
+      <!-- Conteúdo dinâmico: Mapa (Sala P) ou Lista (Estoque G, P, M) -->
       <div id="conteudoDinamico">
-        <!-- Mapa da Sala P -->
-        <div id="mapaContainer" style="display: none;">
-          <div class="section-header">
-            <h2><i class="fas fa-map"></i> Mapa da Sala P</h2>
-            <p class="section-description">🚪 <strong>Porta</strong> está localizada à esquerda da loja.</p>
-          </div>
+        <!-- Mapa da Sala P (exibido por padrão) -->
+        <div id="mapaContainer" style="display: block;">
+          <h2>🗺️ MAPA DA SALA P</h2>
+          <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
+            🚪 <strong>Porta</strong> está localizada à esquerda da loja.
+          </p>
           <div class="mapa-container">
             <svg id="mapa" viewBox="0 0 1200 800" class="mapa"></svg>
           </div>
           <div class="rodape">
-            <i class="fas fa-lightbulb"></i> Clique em uma estante para ver os produtos!
+            💡 Clique em uma estante para ver os produtos cadastrados! 🐻
           </div>
           <div class="legenda-mapa">
             <div class="legenda-item"><span class="cor-verde"></span> 0-25% (0-1 produto)</div>
             <div class="legenda-item"><span class="cor-amarelo"></span> 25-75% (2-3 produtos)</div>
             <div class="legenda-item"><span class="cor-vermelho"></span> 75-100% (4 produtos)</div>
-            <div class="legenda-item"><span class="cor-vazio"></span> Vazia</div>
+            <div class="legenda-item"><span class="cor-vazio"></span> Vazia (0 produtos)</div>
           </div>
         </div>
 
-        <!-- Lista do Estoque -->
+        <!-- Lista do Estoque (oculto por padrão) -->
         <div id="estoqueContainer" style="display: none;">
-          <div class="section-header">
-            <h2 id="estoqueTitulo"><i class="fas fa-boxes"></i> Estoque</h2>
-            <p class="section-description">Lista de todos os produtos em estoque.</p>
-          </div>
+          <h2 id="estoqueTitulo">📦 Estoque</h2>
+          <p style="text-align: center; color: #8b4513; font-size: 16px; margin-bottom: 10px;">
+            📋 Lista de todos os produtos em estoque.
+          </p>
           <div class="estoque-list-container">
             <div id="listaEstoque"></div>
             <div class="paginacao" id="paginacao"></div>
           </div>
         </div>
       </div>
-    </main>
 
-    <!-- Modal para Produtos Cadastrados -->
-    <div id="produtosCadastradosModal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 id="tituloModalProdutos"><i class="fas fa-list"></i> Todos os Produtos</h2>
+      <!-- Modal para Produtos Cadastrados -->
+      <div id="produtosCadastradosModal" class="modal" style="display: none;">
+        <div class="modal-content">
           <span class="close">&times;</span>
-        </div>
-        <div class="modal-body">
-          <div class="modal-filters">
-            <input type="text" id="buscaProdutosModal" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo..." style="flex: 1;">
-            <select id="ordenarModalPor" class="select-fofo">
-              <option value="codigo">Ordenar por Código</option>
-              <option value="descricao">Ordenar por Nome</option>
-              <option value="quantidade">Ordenar por Quantidade</option>
-              <option value="data">Ordenar por Data</option>
+          <h2 id="tituloModalProdutos">📋 Produtos Cadastrados</h2>
+          <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" id="buscaProdutosModal" class="input-fofo" placeholder="Busque por código, descrição, cor, modelo" style="flex: 1;">
+            <select id="ordenarModalPor" class="button-fofo" style="padding: 10px; border-radius: 20px; border: 2px solid #8b4513;">
+              <option value="codigo">🔽 Ordenar por Código</option>
+              <option value="descricao">🔽 Ordenar por Nome</option>
+              <option value="quantidade">🔽 Ordenar por Quantidade</option>
+              <option value="data">🔽 Ordenar por Data</option>
             </select>
-            <button id="selecionarTodosBtn" class="btn btn-info">
-              <i class="fas fa-check-circle"></i> Selecionar Todos
-            </button>
-            <button id="excluirSelecionadosBtn" class="btn btn-danger">
-              <i class="fas fa-trash"></i> Excluir Selecionados
-            </button>
+            <button class="button-fofo" id="selecionarTodosBtn" style="padding: 10px 15px; background-color: #e6d4f1;">✅ Selecionar</button>
+            <button class="button-fofo" id="excluirSelecionadosBtn" style="padding: 10px 15px; background-color: #f8c8c8;">🗑️ Excluir Selecionados</button>
           </div>
           <div id="listaProdutosCadastrados"></div>
           <div class="paginacao" id="paginacaoModal"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Modal para Produtos por Estante -->
-    <div id="produtosEstanteModal" class="modal" style="display: none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 id="tituloProdutosEstante"><i class="fas fa-box-open"></i> Produtos na Estante</h2>
+      <!-- Modal para Produtos por Estante (apenas para Sala P) -->
+      <div id="produtosEstanteModal" class="modal" style="display: none;">
+        <div class="modal-content">
           <span class="close-estante">&times;</span>
-        </div>
-        <div class="modal-body">
+          <h2 id="tituloProdutosEstante">📦 Produtos na Estante</h2>
           <div id="listaProdutosEstante"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Modal de Login -->
-    <div id="loginModal" class="modal" style="display: none;">
-      <div class="modal-content" style="width: 90%; max-width: 400px;">
-        <div class="modal-header">
-          <h2><i class="fas fa-lock"></i> Login de Administrador</h2>
+      <!-- Modal de Login -->
+      <div id="loginModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
           <span class="close-login">&times;</span>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label><i class="fas fa-key"></i> Senha:</label>
-            <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite a senha">
-          </div>
-          <button id="entrarBtn" class="btn btn-primary btn-block">
-            <i class="fas fa-sign-in-alt"></i> Entrar
+          <h2>🔑 Login</h2>
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
+          <input type="email" id="emailInput" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Senha:</label>
+          <input type="password" id="senhaInput" class="input-fofo" placeholder="Digite sua senha" style="margin-top: 6px;">
+          <button class="button-fofo" id="esqueciSenhaBtn" style="margin-top: 10px; width: 100%; background-color: #fff3cd; color: #856404;">
+            🔑 Esqueci a senha
           </button>
-          <p id="erroLogin" class="erro-message"></p>
+          <button class="button-fofo" id="entrarBtn" style="margin-top: 10px; width: 100%;">🔓 Entrar</button>
+          <button class="button-fofo" id="cadastrarBtn" style="margin-top: 10px; width: 100%; background-color: #d4edda; color: #155724;">
+            👤 Criar Conta
+          </button>
+          <p id="erroLogin" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
         </div>
       </div>
-    </div>
 
-    <!-- Modal para Histórico -->
-    <div id="historicoModal" class="modal" style="display: none;">
-      <div class="modal-content" style="width: 90%; max-width: 900px; max-height: 85%;">
-        <div class="modal-header">
-          <h2><i class="fas fa-history"></i> Histórico de Movimentações</h2>
-          <span class="close-historico">&times;</span>
+      <!-- Modal para Recuperação de Senha -->
+      <div id="recuperarSenhaModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+          <span class="close-recuperar-senha">&times;</span>
+          <h2>🔑 Recuperar Senha</h2>
+          <p style="text-align: center; color: #8b4513; margin-bottom: 15px;">
+            Digite seu email para receber uma senha temporária.
+          </p>
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
+          <input type="email" id="emailRecuperacao" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
+          <button class="button-fofo" id="solicitarRecuperacaoBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
+            📧 Enviar Senha Temporária
+          </button>
+          <p id="erroRecuperacao" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
         </div>
-        <div class="modal-body">
-          <div class="modal-filters">
-            <input type="text" id="buscaHistorico" class="input-fofo" placeholder="Busque por código, descrição ou usuário..." style="flex: 1;">
-            <button id="buscarHistoricoBtn" class="btn btn-primary">
-              <i class="fas fa-search"></i> Buscar
+      </div>
+
+      <!-- Modal para Cadastro de Usuário -->
+      <div id="cadastroUsuarioModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+          <span class="close-cadastro-usuario">&times;</span>
+          <h2>👤 Criar Conta</h2>
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Email:</label>
+          <input type="email" id="novoEmail" class="input-fofo" placeholder="Digite seu email" style="margin-top: 6px;">
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Nome:</label>
+          <input type="text" id="novoNome" class="input-fofo" placeholder="Digite seu nome" style="margin-top: 6px;">
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Senha:</label>
+          <input type="password" id="novaSenha" class="input-fofo" placeholder="Digite sua senha" style="margin-top: 6px;">
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Confirmar Senha:</label>
+          <input type="password" id="confirmarSenha" class="input-fofo" placeholder="Confirme sua senha" style="margin-top: 6px;">
+          <button class="button-fofo" id="criarContaBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
+            ✅ Criar Conta
+          </button>
+          <p id="erroCadastroUsuario" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
+        </div>
+      </div>
+
+      <!-- Modal para Gerenciamento de Usuários -->
+      <div id="gerenciarUsuariosModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 700px;">
+          <span class="close-usuarios">&times;</span>
+          <h2>👥 Gerenciamento de Usuários</h2>
+          
+          <!-- Formulário de Cadastro de Usuário -->
+          <div class="card" style="margin-bottom: 20px;">
+            <h3>📝 Cadastrar Novo Usuário</h3>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+              <input type="email" id="novoEmailAdmin" class="input-fofo" placeholder="Email" style="flex: 1;">
+              <input type="text" id="novoNomeAdmin" class="input-fofo" placeholder="Nome de Usuário" style="flex: 1;">
+              <input type="password" id="novaSenhaAdmin" class="input-fofo" placeholder="Senha" style="flex: 1;">
+            </div>
+            <div style="margin-top: 10px;">
+              <select id="novoNivelAdmin" class="input-fofo" style="width: 100%;">
+                <option value="funcionario">Funcionário</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+            <button class="button-fofo" id="cadastrarUsuarioBtn" style="margin-top: 15px; width: 100%; background-color: #d4edda; color: #155724;">
+              ✅ Cadastrar Usuário
             </button>
+            <p id="erroCadastroUsuarioAdmin" style="color: #d35f5f; margin-top: 8px; font-size: 16px;"></p>
+          </div>
+          
+          <!-- Lista de Usuários -->
+          <div class="card">
+            <h3>📋 Usuários Cadastrados</h3>
+            <div id="listaUsuarios" style="max-height: 300px; overflow-y: auto; margin-top: 10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal para Editar Nome de Usuário -->
+      <div id="editarUsuarioModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+          <span class="close-editar-usuario">&times;</span>
+          <h2>✏️ Editar Nome de Usuário</h2>
+          <label style="display: block; margin-top: 12px; font-weight: bold; color: #8b4513; font-size: 16px;">Novo Nome:</label>
+          <input type="text" id="novoNomeUsuario" class="input-fofo" placeholder="Digite o novo nome" style="margin-top: 6px;">
+          <button class="button-fofo" id="salvarNomeUsuarioBtn" style="margin-top: 20px; width: 100%; background-color: #d4edda; color: #155724;">
+            💾 Salvar
+          </button>
+          <p id="erroEditarUsuario" style="color: #d35f5f; margin-top: 8px; font-size: 16px; text-align: center;"></p>
+        </div>
+      </div>
+
+      <!-- Modal para Histórico (Timeline) -->
+      <div id="historicoModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 800px; max-height: 85%;">
+          <span class="close-historico">&times;</span>
+          <h2>📜 Histórico de Movimentações</h2>
+          <div style="margin-bottom: 15px;">
+            <input type="text" id="buscaHistorico" class="input-fofo" placeholder="Busque por código, descrição ou usuário" style="flex: 1;">
+            <button class="button-fofo" id="buscarHistoricoBtn" style="margin-top: 0;">🔎 Buscar</button>
           </div>
           <div id="listaHistorico" style="max-height: 500px; overflow-y: auto;"></div>
         </div>
       </div>
-    </div>
+
+      <!-- Modal para Configurações -->
+      <div id="configuracoesModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 500px;">
+          <span class="close-configuracoes">&times;</span>
+          <h2>⚙️ Configurações</h2>
+          <div class="card">
+            <h3>👤 Minha Conta</h3>
+            <p><strong>Email:</strong> <span id="emailUsuarioConfig"></span></p>
+            <p><strong>Nome:</strong> <span id="nomeUsuarioConfig"></span></p>
+            <p><strong>Nível:</strong> <span id="nivelUsuarioConfig"></span></p>
+            <button class="button-fofo" id="editarPerfilBtn" style="margin-top: 15px; width: 100%; background-color: #e6d4f1;">
+              ✏️ Editar Perfil
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal para Notificações -->
+      <div id="notificacoesModal" class="modal" style="display: none;">
+        <div class="modal-content" style="width: 90%; max-width: 500px; max-height: 70%;">
+          <span class="close-notificacoes">&times;</span>
+          <h2>🔔 Notificações</h2>
+          <div id="listaNotificacoes" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+    </main>
 
   </div>
 
 </div>
 
 <script>
-// Senha de administrador
-const SENHA_ADMIN = "mollibear123";
-
 // Variáveis globais
 let produtosSelecionados = [];
-let modoAtual = localStorage.getItem('mollibear_modo_atual') || 'sala_p';
+let modoAtual = 'sala_p';
 let unsubscribeFirestore = null;
 let produtosAtuais = [];
 let paginaAtual = 1;
 const itensPorPagina = 50;
-let usuarioLogado = "";
+let usuarioLogado = null;
 let migracaoConcluida = localStorage.getItem('migracao_concluida') === 'true';
+let notificacoes = [];
+
+// Função para mostrar toast
+function mostrarToast(mensagem, tipo = 'sucesso') {
+  const toast = document.getElementById('toast');
+  toast.textContent = mensagem;
+  toast.className = `toast ${tipo}`;
+  toast.style.display = 'block';
+  
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 2000);
+}
 
 // Função para verificar se o usuário está logado
 function estaLogado() {
@@ -516,86 +748,86 @@ function estaLogado() {
 }
 
 // Função para fazer login
-function fazerLogin() {
+async function fazerLogin() {
+  const email = document.getElementById('emailInput').value.trim();
   const senha = document.getElementById('senhaInput').value;
   const erroLogin = document.getElementById('erroLogin');
   
-  if (senha === SENHA_ADMIN) {
-    localStorage.setItem('mollibear_logado', 'true');
-    usuarioLogado = "Administrador";
-    document.getElementById('loginModal').style.display = 'none';
-    document.getElementById('loginBtn').style.display = 'none';
-    document.getElementById('logoutBtn').style.display = 'flex';
-    document.getElementById('asideCadastro').style.display = 'flex';
-    erroLogin.textContent = '';
-    
-    if (!migracaoConcluida) {
-      executarMigracao();
-    } else {
-      iniciarListenerFirestore();
-    }
-  } else {
-    erroLogin.textContent = '❌ Senha incorreta!';
-  }
-}
-
-// Função para executar a migração
-async function executarMigracao() {
-  const notificacao = document.getElementById('notificacaoMigracao');
-  const contador = document.getElementById('contadorMigracao');
-  const progresso = document.getElementById('progressoMigracao');
-  
-  if (!notificacao) {
-    const divNotificacao = document.createElement('div');
-    divNotificacao.id = 'notificacaoMigracao';
-    divNotificacao.className = 'notificacao';
-    divNotificacao.innerHTML = `
-      <p><i class="fas fa-exchange-alt"></i> <strong>Migrando dados...</strong> <span id="contadorMigracao">0</span> produtos</p>
-      <div class="barra-progresso">
-        <div id="progressoMigracao" class="progresso"></div>
-      </div>
-    `;
-    document.querySelector('header').insertBefore(divNotificacao, document.querySelector('.header-actions'));
+  if (!email || !senha) {
+    erroLogin.textContent = '❌ Preencha email e senha!';
+    return;
   }
   
   try {
-    const totalMigrados = await window.migrarDadosAntigos();
-    if (document.getElementById('contadorMigracao')) {
-      document.getElementById('contadorMigracao').textContent = totalMigrados;
+    const resultado = await window.fazerLoginFirebase(email, senha);
+    
+    if (resultado.sucesso) {
+      localStorage.setItem('mollibear_logado', 'true');
+      usuarioLogado = resultado.usuario;
+      localStorage.setItem('mollibear_usuario', JSON.stringify(usuarioLogado));
+      
+      // Atualizar UI
+      document.getElementById('loginModal').style.display = 'none';
+      document.getElementById('loginBtnHeader').style.display = 'none';
+      document.getElementById('logoutBtnHeader').style.display = 'block';
+      document.getElementById('perfilUsuario').style.display = 'flex';
+      document.getElementById('asideCadastro').style.display = 'flex';
+      document.getElementById('nomeUsuario').textContent = `👤 ${usuarioLogado.nome}`;
+      document.getElementById('emailUsuarioConfig').textContent = usuarioLogado.email;
+      document.getElementById('nomeUsuarioConfig').textContent = usuarioLogado.nome;
+      document.getElementById('nivelUsuarioConfig').textContent = usuarioLogado.nivel === 'admin' ? 'Administrador' : 'Funcionário';
+      
+      // Mostrar botão de gerenciar usuários apenas para admin
+      if (usuarioLogado.nivel === 'admin') {
+        document.getElementById('gerenciarUsuariosBtn').style.display = 'block';
+      } else {
+        document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
+      }
+      
+      erroLogin.textContent = '';
+      
+      // Executar migração se não foi feita ainda
+      if (!migracaoConcluida) {
+        executarMigracao();
+      } else {
+        iniciarListenerFirestore();
+      }
+      
+      mostrarToast('✅ Login realizado com sucesso!');
+    } else {
+      erroLogin.textContent = resultado.mensagem;
     }
-    if (document.getElementById('progressoMigracao')) {
-      document.getElementById('progressoMigracao').style.width = '100%';
-    }
-    migracaoConcluida = true;
-    localStorage.setItem('migracao_concluida', 'true');
-    setTimeout(() => {
-      const notificacao = document.getElementById('notificacaoMigracao');
-      if (notificacao) notificacao.style.display = 'none';
-    }, 2000);
-    iniciarListenerFirestore();
   } catch (error) {
-    console.error("Erro na migração:", error);
-    const notificacao = document.getElementById('notificacaoMigracao');
-    if (notificacao) notificacao.style.display = 'none';
+    console.error("Erro ao fazer login:", error);
+    erroLogin.textContent = '❌ Erro ao fazer login!';
   }
 }
 
 // Função para fazer logout
 function fazerLogout() {
   localStorage.removeItem('mollibear_logado');
-  usuarioLogado = "";
-  document.getElementById('loginBtn').style.display = 'flex';
-  document.getElementById('logoutBtn').style.display = 'none';
+  localStorage.removeItem('mollibear_usuario');
+  usuarioLogado = null;
+  
+  document.getElementById('loginBtnHeader').style.display = 'block';
+  document.getElementById('logoutBtnHeader').style.display = 'none';
+  document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
+  document.getElementById('perfilUsuario').style.display = 'none';
   document.getElementById('asideCadastro').style.display = 'none';
+  document.getElementById('nomeUsuario').textContent = '👤 Convidado';
+  
   if (unsubscribeFirestore) {
     unsubscribeFirestore();
     unsubscribeFirestore = null;
   }
+  
+  mostrarToast('🚪 Você saiu do sistema.');
 }
 
 // Função para abrir o modal de login
 function abrirModalLogin() {
   document.getElementById('loginModal').style.display = 'block';
+  document.getElementById('emailInput').value = '';
   document.getElementById('senhaInput').value = '';
   document.getElementById('erroLogin').textContent = '';
 }
@@ -605,27 +837,175 @@ function fecharModalLogin() {
   document.getElementById('loginModal').style.display = 'none';
 }
 
-// Função para formatar data
+// Função para executar a migração
+async function executarMigracao() {
+  const notificacao = document.getElementById('notificacaoMigracao');
+  
+  if (notificacao) {
+    notificacao.style.display = 'block';
+  }
+  
+  try {
+    const totalMigrados = await window.migrarDadosAntigos();
+    
+    migracaoConcluida = true;
+    localStorage.setItem('migracao_concluida', 'true');
+    
+    if (notificacao) {
+      setTimeout(() => {
+        notificacao.style.display = 'none';
+      }, 2000);
+    }
+    
+    iniciarListenerFirestore();
+    mostrarToast(`✅ Migração concluída! ${totalMigrados} produtos migrados.`);
+    
+  } catch (error) {
+    console.error("Erro na migração:", error);
+    if (notificacao) {
+      notificacao.style.display = 'none';
+    }
+    mostrarToast('❌ Erro durante a migração.', 'erro');
+  }
+}
+
+// Função para abrir modal de recuperação de senha
+function abrirModalRecuperarSenha() {
+  document.getElementById('loginModal').style.display = 'none';
+  document.getElementById('recuperarSenhaModal').style.display = 'block';
+  document.getElementById('emailRecuperacao').value = '';
+  document.getElementById('erroRecuperacao').textContent = '';
+}
+
+// Função para fechar modal de recuperação de senha
+function fecharModalRecuperarSenha() {
+  document.getElementById('recuperarSenhaModal').style.display = 'none';
+  document.getElementById('loginModal').style.display = 'block';
+}
+
+// Função para solicitar recuperação de senha
+async function solicitarRecuperacao() {
+  const email = document.getElementById('emailRecuperacao').value.trim();
+  const erroRecuperacao = document.getElementById('erroRecuperacao');
+  
+  if (!email) {
+    erroRecuperacao.textContent = '❌ Digite um email válido!';
+    return;
+  }
+  
+  try {
+    const resultado = await window.solicitarRecuperacaoSenha(email);
+    
+    if (resultado.sucesso) {
+      fecharModalRecuperarSenha();
+      alert(`📧 Senha temporária: ${resultado.senhaTemporaria}\n\nUse esta senha para fazer login e depois altere sua senha.`);
+      mostrarToast('📧 Senha temporária gerada!');
+    } else {
+      erroRecuperacao.textContent = resultado.mensagem;
+    }
+  } catch (error) {
+    console.error("Erro ao solicitar recuperação:", error);
+    erroRecuperacao.textContent = '❌ Erro ao solicitar recuperação!';
+  }
+}
+
+// Função para abrir modal de cadastro de usuário
+function abrirModalCadastroUsuario() {
+  document.getElementById('loginModal').style.display = 'none';
+  document.getElementById('cadastroUsuarioModal').style.display = 'block';
+  document.getElementById('novoEmail').value = '';
+  document.getElementById('novoNome').value = '';
+  document.getElementById('novaSenha').value = '';
+  document.getElementById('confirmarSenha').value = '';
+  document.getElementById('erroCadastroUsuario').textContent = '';
+}
+
+// Função para fechar modal de cadastro de usuário
+function fecharModalCadastroUsuario() {
+  document.getElementById('cadastroUsuarioModal').style.display = 'none';
+  document.getElementById('loginModal').style.display = 'block';
+}
+
+// Função para criar conta
+async function criarConta() {
+  const email = document.getElementById('novoEmail').value.trim();
+  const nome = document.getElementById('novoNome').value.trim();
+  const senha = document.getElementById('novaSenha').value;
+  const confirmarSenha = document.getElementById('confirmarSenha').value;
+  const erroCadastroUsuario = document.getElementById('erroCadastroUsuario');
+  
+  if (!email || !nome || !senha || !confirmarSenha) {
+    erroCadastroUsuario.textContent = '❌ Preencha todos os campos!';
+    return;
+  }
+  
+  if (senha !== confirmarSenha) {
+    erroCadastroUsuario.textContent = '❌ As senhas não coincidem!';
+    return;
+  }
+  
+  // Validar formato de email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    erroCadastroUsuario.textContent = '❌ Email inválido!';
+    return;
+  }
+  
+  // Verificar se o email já está cadastrado
+  const usuarios = await window.carregarUsuarios();
+  const emailJaExiste = usuarios.some(u => u.email === email);
+  
+  if (emailJaExiste) {
+    erroCadastroUsuario.textContent = '❌ Este email já está cadastrado!';
+    return;
+  }
+  
+  const sucesso = await window.cadastrarUsuario(email, nome, senha, 'funcionario');
+  
+  if (sucesso) {
+    fecharModalCadastroUsuario();
+    mostrarToast('✅ Conta criada com sucesso! Faça login.');
+    
+    // Abrir modal de login
+    abrirModalLogin();
+    document.getElementById('emailInput').value = email;
+  } else {
+    erroCadastroUsuario.textContent = '❌ Erro ao criar conta!';
+  }
+}
+
+// Função para formatar data para timeline
+function formatarDataTimeline(data) {
+  if (!data) return "--:--";
+  if (data instanceof Object && data.toDate) {
+    const date = data.toDate();
+    return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  return "--:--";
+}
+
+// Função para formatar data completa
 function formatarData(data) {
   if (!data) return "Não informado";
   if (data instanceof Object && data.toDate) {
     const date = data.toDate();
-    return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR');
   }
   const [ano, mes, dia] = data.split('-');
   return `${dia}/${mes}/${ano}`;
 }
 
-// Função para calcular porcentagem de ocupação de uma estante
+// Função para calcular porcentagem de ocupação de uma estante (100% = 4 produtos)
 function calcularPorcentagemOcupacao(estanteNumero) {
   const produtosEstante = produtosAtuais.filter(p => p.estante == estanteNumero);
-  return (produtosEstante.length / 4) * 100;
+  const quantidadeProdutos = produtosEstante.length;
+  return (quantidadeProdutos / 4) * 100;
 }
 
-// Função para determinar a cor da estante
+// Função para determinar a cor da estante com base na ocupação
 function getCorEstante(estanteNumero) {
   const porcentagem = calcularPorcentagemOcupacao(estanteNumero);
-  if (porcentagem === 0) return "#f8f9fa";
+  if (porcentagem === 0) return "#f5e6d3";
   if (porcentagem <= 25) return "#d4edda";
   if (porcentagem <= 75) return "#fff3cd";
   return "#f8d7da";
@@ -636,79 +1016,99 @@ function gerarIdInput(codigo) {
   return `quantidade-${codigo}`;
 }
 
-// Função para gerar card de produto
+// Função para gerar card de produto (REUTILIZÁVEL)
 function gerarCardProduto(produto, mostrarEstanteNivel = true, mostrarCheckbox = false, index = null) {
   const idInput = gerarIdInput(produto.codigo);
   
   return `
-    <div class="produto-card">
+    <div style="margin-bottom: 15px; padding: 12px; border: 2px solid #f5e6d3; border-radius: 8px; background-color: #fffaf0; display: flex; justify-content: space-between; align-items: center; flex-direction: column; position: relative;">
       ${mostrarCheckbox ? `
-        <input type="checkbox" id="checkbox-${index}" class="checkbox-produto" 
+        <input type="checkbox" id="checkbox-${index}" style="position: absolute; top: 10px; right: 10px; width: 20px; height: 20px;" 
           ${produtosSelecionados.some(p => p.codigo === produto.codigo && p.cor === produto.cor && p.modelo === produto.modelo) ? 'checked' : ''}>
       ` : ''}
       
-      <div class="produto-info">
-        <div class="produto-header">
-          <div class="produto-codigo">
-            <i class="fas fa-barcode"></i> <strong>${produto.codigo}</strong>
-          </div>
-          <div class="produto-descricao">
-            <i class="fas fa-tag"></i> ${produto.descricao}
-          </div>
+      <div style="flex: 1; width: 100%;">
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📌 Código:</strong> ${produto.codigo}</p>
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📝 Descrição:</strong> ${produto.descricao}</p>
+        ${produto.cor ? `<p style="margin: 5px 0; font-size: 16px;"><strong>🎨 Cor:</strong> ${produto.cor}</p>` : ''}
+        <p style="margin: 5px 0; font-size: 16px;"><strong>📐 Modelo:</strong> ${produto.modelo}</p>
+        ${mostrarEstanteNivel && produto.estante ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📦 Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}</p>` : ''}
+        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+          <p style="margin: 0; font-size: 16px;"><strong>📊 Quantidade:</strong></p>
+          <input type="number" id="${idInput}" value="${produto.quantidade || 0}" 
+            style="width: 80px; padding: 6px; border: 2px solid #8b4513; border-radius: 8px; text-align: center; font-size: 16px;" 
+            min="0">
+          <button class="button-salvar-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${idInput}', '${modoAtual}')">💾</button>
         </div>
-        
-        <div class="produto-details">
-          ${produto.cor ? `<div class="produto-detail"><i class="fas fa-palette"></i> <strong>Cor:</strong> ${produto.cor}</div>` : ''}
-          <div class="produto-detail"><i class="fas fa-cube"></i> <strong>Modelo:</strong> ${produto.modelo}</div>
-          ${mostrarEstanteNivel && produto.estante ? `
-            <div class="produto-detail">
-              <i class="fas fa-map-marker-alt"></i> <strong>Estante:</strong> ${produto.estante}, <strong>Nível:</strong> ${produto.nivel}
-            </div>
-          ` : ''}
-          ${produto.dataLancamento ? `<div class="produto-detail"><i class="fas fa-calendar-alt"></i> <strong>Data:</strong> ${formatarData(produto.dataLancamento)}</div>` : ''}
-        </div>
-        
-        <div class="produto-quantidade">
-          <div class="quantidade-label">
-            <i class="fas fa-hashtag"></i> <strong>Quantidade:</strong>
-          </div>
-          <div class="quantidade-input-group">
-            <input type="number" id="${idInput}" value="${produto.quantidade || 0}" 
-              class="input-quantidade" min="0">
-            <button class="btn btn-save-quantidade" onclick="salvarQuantidade('${produto.codigo}', '${idInput}', '${modoAtual}')" title="Salvar">
-              <i class="fas fa-check"></i>
-            </button>
-          </div>
-        </div>
+        ${produto.dataLancamento ? `<p style="margin: 5px 0; font-size: 16px;"><strong>📅 Data:</strong> ${formatarData(produto.dataLancamento)}</p>` : ''}
       </div>
     </div>
   `;
 }
 
-// Função para salvar a quantidade editada
+// Função para salvar a quantidade editada (USANDO TRANSAÇÃO)
 async function salvarQuantidade(codigo, inputId, tipo) {
   if (!estaLogado()) {
-    alert('❌ Você não tem permissão para alterar quantidades!');
+    mostrarToast('❌ Você não tem permissão para alterar quantidades!', 'erro');
     return;
   }
   
   const novaQuantidade = parseInt(document.getElementById(inputId).value);
   
   if (isNaN(novaQuantidade) || novaQuantidade < 0) {
-    alert('❌ Insira uma quantidade válida (número positivo)!');
+    mostrarToast('❌ Insira uma quantidade válida (número positivo)!', 'erro');
     const produtos = await window.carregarProdutos(tipo);
     const produto = produtos.find(p => p.codigo === codigo);
-    if (produto) document.getElementById(inputId).value = produto.quantidade || 0;
+    if (produto) {
+      document.getElementById(inputId).value = produto.quantidade || 0;
+    }
     return;
   }
   
-  const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado);
-  if (!sucesso) {
-    alert('❌ Erro ao atualizar quantidade. Tente novamente.');
+  const sucesso = await window.atualizarQuantidadeTransacao(codigo, novaQuantidade, tipo, usuarioLogado.nome);
+  
+  if (sucesso) {
+    mostrarToast('✅ Quantidade atualizada!');
+    adiconarNotificacao(`Quantidade de ${codigo} atualizada para ${novaQuantidade}`);
+  } else {
+    mostrarToast('❌ Erro ao atualizar quantidade.', 'erro');
     const produtos = await window.carregarProdutos(tipo);
     const produto = produtos.find(p => p.codigo === codigo);
-    if (produto) document.getElementById(inputId).value = produto.quantidade || 0;
+    if (produto) {
+      document.getElementById(inputId).value = produto.quantidade || 0;
+    }
   }
+}
+
+// Função para adiconar notificação
+function adiconarNotificacao(mensagem) {
+  notificacoes.unshift({
+    id: Date.now(),
+    mensagem: mensagem,
+    data: new Date(),
+    lida: false
+  });
+  
+  // Atualizar contador
+  const naoLidas = notificacoes.filter(n => !n.lida).length;
+  const contador = document.getElementById('contadorNotificacoes');
+  if (naoLidas > 0) {
+    contador.textContent = naoLidas;
+    contador.style.display = 'inline';
+  } else {
+    contador.style.display = 'none';
+  }
+  
+  // Salvar no localStorage (para persistência)
+  localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
+}
+
+// Função para marcar notificações como lidas
+function marcarNotificacoesComoLidas() {
+  notificacoes.forEach(n => n.lida = true);
+  const contador = document.getElementById('contadorNotificacoes');
+  contador.style.display = 'none';
+  localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
 }
 
 // Função para atualizar contadores
@@ -716,13 +1116,13 @@ function atualizarContadores() {
   const totalProdutos = produtosAtuais.length;
   const quantidadeTotal = produtosAtuais.reduce((sum, p) => sum + parseInt(p.quantidade || 0), 0);
   
-  document.getElementById('totalProdutos').textContent = totalProdutos.toLocaleString('pt-BR');
+  document.getElementById('totalProdutos').textContent = totalProdutos;
   document.getElementById('quantidadeTotal').textContent = quantidadeTotal.toLocaleString('pt-BR');
   
   if (modoAtual === 'sala_p') {
     const estantesOcupadas = new Set(produtosAtuais.filter(p => p.estante).map(p => p.estante)).size;
     document.getElementById('estantesUtilizadas').textContent = `${estantesOcupadas}/51`;
-    document.getElementById('contadorEstantes').style.display = 'flex';
+    document.getElementById('contadorEstantes').style.display = 'block';
   } else {
     document.getElementById('contadorEstantes').style.display = 'none';
   }
@@ -732,15 +1132,19 @@ function atualizarContadores() {
 function ordenarProdutos(produtos, por) {
   return [...produtos].sort((a, b) => {
     switch (por) {
-      case 'codigo': return a.codigo.localeCompare(b.codigo);
-      case 'descricao': return a.descricao.localeCompare(b.descricao);
-      case 'quantidade': return (b.quantidade || 0) - (a.quantidade || 0);
+      case 'codigo':
+        return a.codigo.localeCompare(b.codigo);
+      case 'descricao':
+        return a.descricao.localeCompare(b.descricao);
+      case 'quantidade':
+        return (b.quantidade || 0) - (a.quantidade || 0);
       case 'data':
         if (!a.dataLancamento && !b.dataLancamento) return 0;
         if (!a.dataLancamento) return 1;
         if (!b.dataLancamento) return -1;
         return new Date(b.dataLancamento) - new Date(a.dataLancamento);
-      default: return 0;
+      default:
+        return 0;
     }
   });
 }
@@ -762,18 +1166,18 @@ function gerarPaginacao(produtos, containerId, callback) {
     return;
   }
   
-  let html = '<div class="paginacao-group">';
+  let html = '<div style="display: flex; justify-content: center; gap: 10px; margin-top: 20px;">';
   
   if (paginaAtual > 1) {
-    html += `<button class="btn btn-paginacao" onclick="${callback}(${paginaAtual - 1})"><i class="fas fa-chevron-left"></i> Anterior</button>`;
+    html += `<button class="button-fofo" onclick="${callback}(${paginaAtual - 1})" style="padding: 8px 16px;">← Anterior</button>`;
   }
   
   for (let i = 1; i <= totalPaginas; i++) {
-    html += `<button class="btn btn-paginacao ${i === paginaAtual ? 'active' : ''}" onclick="${callback}(${i})">${i}</button>`;
+    html += `<button class="button-fofo ${i === paginaAtual ? 'active' : ''}" onclick="${callback}(${i})" style="padding: 8px 16px;">${i}</button>`;
   }
   
   if (paginaAtual < totalPaginas) {
-    html += `<button class="btn btn-paginacao" onclick="${callback}(${paginaAtual + 1})">Próximo <i class="fas fa-chevron-right"></i></button>`;
+    html += `<button class="button-fofo" onclick="${callback}(${paginaAtual + 1})" style="padding: 8px 16px;">Próximo →</button>`;
   }
   
   html += '</div>';
@@ -800,8 +1204,9 @@ function preencherSelectEstantes() {
 
 // Função para trocar entre Sala P e Estoques
 async function trocarModo() {
-  modoAtual = document.getElementById('modoSelect').value;
-  localStorage.setItem('mollibear_modo_atual', modoAtual);
+  modoAtual = document.getElementById('modoSelectHeader').value;
+  document.getElementById('modoSelect').value = modoAtual;
+  salvarModoAtual();
   
   if (unsubscribeFirestore) {
     unsubscribeFirestore();
@@ -811,13 +1216,13 @@ async function trocarModo() {
   if (modoAtual === 'sala_p') {
     document.getElementById('mapaContainer').style.display = 'block';
     document.getElementById('estoqueContainer').style.display = 'none';
-    document.getElementById('tituloModalProdutos').innerHTML = '<i class="fas fa-list"></i> Todos os Produtos (Sala P)';
-    document.getElementById('estoqueTitulo').innerHTML = '<i class="fas fa-map"></i> Mapa da Sala P';
+    document.getElementById('tituloModalProdutos').textContent = '📋 Produtos Cadastrados (Sala P)';
+    document.getElementById('estoqueTitulo').textContent = '🗺️ MAPA DA SALA P';
     
     atualizarCoresEstantes();
-    document.getElementById('contadorEstantes').style.display = 'flex';
-    document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo ou estante...";
-    document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo ou estante...";
+    document.getElementById('contadorEstantes').style.display = 'block';
+    document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo ou estante";
+    document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo ou estante";
   } else {
     document.getElementById('mapaContainer').style.display = 'none';
     document.getElementById('estoqueContainer').style.display = 'block';
@@ -827,12 +1232,12 @@ async function trocarModo() {
       estoque_p: 'Estoque P',
       estoque_m: 'Estoque M'
     };
-    document.getElementById('tituloModalProdutos').innerHTML = `<i class="fas fa-list"></i> Todos os Produtos (${nomesEstoque[modoAtual] || 'Estoque'})`;
-    document.getElementById('estoqueTitulo').innerHTML = `<i class="fas fa-boxes"></i> ${nomesEstoque[modoAtual] || 'Estoque'}`;
+    document.getElementById('tituloModalProdutos').textContent = `📋 Produtos Cadastrados (${nomesEstoque[modoAtual] || 'Estoque'})`;
+    document.getElementById('estoqueTitulo').textContent = `📦 ${nomesEstoque[modoAtual] || 'Estoque'}`;
     
     document.getElementById('contadorEstantes').style.display = 'none';
-    document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo...";
-    document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo...";
+    document.getElementById('buscaProduto').placeholder = "Busque por código, descrição, cor, modelo";
+    document.getElementById('buscaProdutosModal').placeholder = "Busque por código, descrição, cor, modelo";
     
     await exibirListaEstoque();
   }
@@ -862,7 +1267,7 @@ async function exibirListaEstoque(pagina = 1) {
   listaEstoque.innerHTML = '';
   
   if (produtosPaginados.length === 0) {
-    listaEstoque.innerHTML = '<div class="empty-message"><i class="fas fa-box-open"></i> Nenhum produto cadastrado!</div>';
+    listaEstoque.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado!</p>';
   } else {
     const mostrarEstante = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto) => {
@@ -888,11 +1293,11 @@ async function exibirProdutosEstante(estanteNumero) {
   const listaProdutos = document.getElementById('listaProdutosEstante');
   const titulo = document.getElementById('tituloProdutosEstante');
   
-  titulo.innerHTML = `<i class="fas fa-box-open"></i> Produtos na Estante ${estanteNumero} (Sala P)`;
+  titulo.textContent = `📦 Produtos na Estante ${estanteNumero} (Sala P)`;
   listaProdutos.innerHTML = '';
   
   if (produtosEstante.length === 0) {
-    listaProdutos.innerHTML = '<div class="empty-message"><i class="fas fa-box-open"></i> Nenhum produto nesta estante!</div>';
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto cadastrado nesta estante!</p>';
   } else {
     produtosEstante.forEach((produto) => {
       listaProdutos.innerHTML += gerarCardProduto(produto, true);
@@ -931,7 +1336,7 @@ async function filtrarProdutosModal(pagina = 1) {
   listaProdutos.innerHTML = '';
   
   if (produtosPaginados.length === 0) {
-    listaProdutos.innerHTML = '<div class="empty-message"><i class="fas fa-search"></i> Nenhum produto encontrado!</div>';
+    listaProdutos.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🐻 Nenhum produto encontrado!</p>';
   } else {
     const mostrarEstante = modoAtual === 'sala_p';
     produtosPaginados.forEach((produto, index) => {
@@ -949,7 +1354,7 @@ async function filtrarProdutosModal(pagina = 1) {
 // Função para selecionar todos os produtos
 async function selecionarTodos() {
   if (!estaLogado()) {
-    alert('❌ Você não tem permissão para selecionar produtos!');
+    mostrarToast('❌ Você não tem permissão para selecionar produtos!', 'erro');
     return;
   }
   
@@ -966,31 +1371,34 @@ async function selecionarTodos() {
   
   produtosSelecionados = [...produtosFiltrados];
   
-  const checkboxes = document.querySelectorAll('.checkbox-produto');
+  const checkboxes = document.querySelectorAll('input[type="checkbox"]');
   checkboxes.forEach(checkbox => {
     const index = checkbox.id.replace('checkbox-', '');
     const produto = produtosFiltrados[index];
-    if (produto) checkbox.checked = true;
+    if (produto) {
+      checkbox.checked = true;
+    }
   });
   
-  alert(`✅ ${produtosFiltrados.length} produtos selecionados!`);
+  mostrarToast(`✅ ${produtosFiltrados.length} produtos selecionados!`);
 }
 
 // Função para excluir produtos selecionados
 async function excluirSelecionados() {
   if (!estaLogado()) {
-    alert('❌ Você não tem permissão para excluir produtos!');
+    mostrarToast('❌ Você não tem permissão para excluir produtos!', 'erro');
     return;
   }
   
   if (produtosSelecionados.length === 0) {
-    alert('❌ Nenhum produto selecionado!');
+    mostrarToast('❌ Nenhum produto selecionado!', 'erro');
     return;
   }
   
-  if (confirm(`🐻 Tem certeza que deseja excluir ${produtosSelecionados.length} produtos?`)) {
+  if (confirm(`🐻 Tem certeza que deseja excluir ${produtosSelecionados.length} produtos selecionados?`)) {
     for (const produto of produtosSelecionados) {
       await window.excluirProduto(produto.codigo, modoAtual);
+      
       await window.adicionarAoHistorico({
         tipo: "Exclusão",
         codigo: produto.codigo,
@@ -999,11 +1407,14 @@ async function excluirSelecionados() {
         modelo: produto.modelo || "N/A",
         quantidadeAnterior: produto.quantidade || 0,
         quantidadeNova: 0
-      }, usuarioLogado);
+      }, usuarioLogado.nome);
+      
+      adiconarNotificacao(`Produto ${produto.codigo} excluído`);
     }
+    
     produtosSelecionados = [];
     await filtrarProdutosModal();
-    alert(`🗑️ ${produtosSelecionados.length} produtos excluídos!`);
+    mostrarToast(`🗑️ ${produtosSelecionados.length} produtos excluídos!`);
   }
 }
 
@@ -1024,7 +1435,7 @@ function fecharModal() {
 // Função para salvar um novo produto
 async function salvarProduto() {
   if (!estaLogado()) {
-    alert('❌ Você não tem permissão para cadastrar produtos!');
+    mostrarToast('❌ Você não tem permissão para cadastrar produtos!', 'erro');
     return;
   }
   
@@ -1052,14 +1463,15 @@ async function salvarProduto() {
   const produtoJaExiste = produtos.some(produto => produto.codigo === codigo);
   
   if (produtoJaExiste) {
-    erroCadastro.textContent = '❌ Este código já está cadastrado!';
+    erroCadastro.textContent = '❌ Este código de produto já está cadastrado!';
     return;
   }
   
   if (modoAtual === 'sala_p') {
     const nivelOcupado = await verificarNivelOcupado(estante, nivel);
     if (nivelOcupado) {
-      if (!confirm(`⚠️ Já existe um produto no nível ${nivel} da estante ${estante}. Deseja cadastrar mesmo assim?`)) {
+      const confirmar = confirm(`⚠️ Já existe um produto cadastrado no nível ${nivel} da estante ${estante}. Deseja cadastrar mesmo assim?`);
+      if (!confirmar) {
         return;
       }
     }
@@ -1074,6 +1486,7 @@ async function salvarProduto() {
   }
   
   await window.salvarProduto(novoProduto, modoAtual);
+  
   await window.adicionarAoHistorico({
     tipo: "Cadastro",
     codigo: codigo,
@@ -1082,12 +1495,13 @@ async function salvarProduto() {
     modelo: modelo,
     quantidadeAnterior: 0,
     quantidadeNova: parseInt(quantidade)
-  }, usuarioLogado);
+  }, usuarioLogado.nome);
   
-  alert('💾 Produto salvo com sucesso!');
+  mostrarToast('✅ Produto salvo com sucesso!');
+  adiconarNotificacao(`Produto ${codigo} cadastrado`);
+  
   erroCadastro.textContent = '';
   
-  // Limpar campos
   document.getElementById('codigoProduto').value = '';
   document.getElementById('descricaoProduto').value = '';
   document.getElementById('corProduto').value = '';
@@ -1116,7 +1530,7 @@ async function buscarProduto() {
   );
   
   if (produtosEncontrados.length === 0) {
-    resultadoBusca.innerHTML = '<div class="empty-message"><i class="fas fa-search"></i> Nenhum produto encontrado!</div>';
+    resultadoBusca.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">🐻 Nenhum produto encontrado!</p>';
   } else {
     resultadoBusca.innerHTML = '';
     const mostrarEstante = modoAtual === 'sala_p';
@@ -1148,44 +1562,85 @@ function iniciarListenerFirestore() {
   });
 }
 
-// Função para exibir histórico
+// Função para salvar o modo atual no localStorage
+function salvarModoAtual() {
+  localStorage.setItem('mollibear_modo_atual', modoAtual);
+}
+
+// Função para carregar o modo atual do localStorage
+function carregarModoAtual() {
+  const modoSalvo = localStorage.getItem('mollibear_modo_atual');
+  if (modoSalvo) {
+    modoAtual = modoSalvo;
+    document.getElementById('modoSelect').value = modoSalvo;
+    document.getElementById('modoSelectHeader').value = modoSalvo;
+  }
+}
+
+// Função para exibir histórico (Timeline)
 async function exibirHistorico() {
   const modal = document.getElementById('historicoModal');
   const listaHistorico = document.getElementById('listaHistorico');
   
-  const historico = await window.carregarHistorico();
+  const historico = await window.carregarHistorico(100);
   
   if (historico.length === 0) {
-    listaHistorico.innerHTML = '<div class="empty-message"><i class="fas fa-history"></i> Nenhum registro no histórico!</div>';
+    listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro no histórico!</p>';
   } else {
-    listaHistorico.innerHTML = `
-      <table class="historico-table">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Tipo</th>
-            <th>Código</th>
-            <th>Descrição</th>
-            <th>Qtd. Anterior</th>
-            <th>Qtd. Nova</th>
-            <th>Usuário</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${historico.map(item => `
-            <tr>
-              <td>${formatarData(item.data)}</td>
-              <td><span class="tipo-badge ${item.tipo === 'Cadastro' ? 'cadastro' : item.tipo === 'Atualização de Quantidade' ? 'atualizacao' : 'exclusao'}">${item.tipo}</span></td>
-              <td>${item.codigo}</td>
-              <td>${item.descricao}</td>
-              <td>${item.quantidadeAnterior}</td>
-              <td>${item.quantidadeNova}</td>
-              <td>${item.usuario}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+    listaHistorico.innerHTML = '<div class="timeline">' +
+      historico.map(item => {
+        const hora = formatarDataTimeline(item.data);
+        const tipo = item.tipo;
+        const usuario = item.usuario || 'Desconhecido';
+        const codigo = item.codigo || 'N/A';
+        const descricao = item.descricao || 'N/A';
+        const quantidadeAnterior = item.quantidadeAnterior || 0;
+        const quantidadeNova = item.quantidadeNova || 0;
+        const diferenca = quantidadeNova - quantidadeAnterior;
+        const simbolo = diferenca >= 0 ? '+' : '';
+        
+        let corDiferenca = '#28a745'; // Verde para entrada
+        if (diferenca < 0) {
+          corDiferenca = '#dc3545'; // Vermelho para saída
+        } else if (tipo === 'Cadastro') {
+          corDiferenca = '#007bff'; // Azul para cadastro
+        } else if (tipo === 'Exclusão') {
+          corDiferenca = '#6c757d'; // Cinza para exclusão
+        }
+        
+        let acao;
+        if (tipo === 'Cadastro') {
+          acao = `Cadastro`;
+        } else if (tipo === 'Exclusão') {
+          acao = `Exclusão`;
+        } else if (diferenca > 0) {
+          acao = `Entrada`;
+        } else if (diferenca < 0) {
+          acao = `Saída`;
+        } else {
+          acao = `Atualização`;
+        }
+        
+        return `
+          <div class="timeline-item">
+            <div class="timeline-time">${hora}</div>
+            <div class="timeline-content">
+              <div class="timeline-header">
+                <strong>${usuario}</strong>
+                <span class="timeline-acao" style="color: ${corDiferenca}; margin-left: 10px;">${acao}</span>
+              </div>
+              <div class="timeline-details">
+                ${tipo !== 'Exclusão' ? `
+                  <span class="timeline-diferenca" style="color: ${corDiferenca}; font-weight: bold;">${simbolo}${Math.abs(diferenca)}</span>
+                ` : ''}
+                <span class="timeline-codigo">${codigo}</span>
+                ${descricao !== 'N/A' ? `<span class="timeline-descricao">- ${descricao}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('') +
+    '</div>';
   }
   
   modal.style.display = 'block';
@@ -1199,7 +1654,7 @@ function fecharModalHistorico() {
 // Função para buscar no histórico
 async function buscarNoHistorico() {
   const busca = document.getElementById('buscaHistorico').value.toLowerCase();
-  const historico = await window.carregarHistorico();
+  const historico = await window.carregarHistorico(100);
   const listaHistorico = document.getElementById('listaHistorico');
   
   const historicoFiltrado = historico.filter(item => 
@@ -1210,40 +1665,295 @@ async function buscarNoHistorico() {
   );
   
   if (historicoFiltrado.length === 0) {
-    listaHistorico.innerHTML = '<div class="empty-message"><i class="fas fa-search"></i> Nenhum registro encontrado!</div>';
+    listaHistorico.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">📜 Nenhum registro encontrado!</p>';
   } else {
-    listaHistorico.innerHTML = `
-      <table class="historico-table">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Tipo</th>
-            <th>Código</th>
-            <th>Descrição</th>
-            <th>Qtd. Anterior</th>
-            <th>Qtd. Nova</th>
-            <th>Usuário</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${historicoFiltrado.map(item => `
-            <tr>
-              <td>${formatarData(item.data)}</td>
-              <td><span class="tipo-badge ${item.tipo === 'Cadastro' ? 'cadastro' : item.tipo === 'Atualização de Quantidade' ? 'atualizacao' : 'exclusao'}">${item.tipo}</span></td>
-              <td>${item.codigo}</td>
-              <td>${item.descricao}</td>
-              <td>${item.quantidadeAnterior}</td>
-              <td>${item.quantidadeNova}</td>
-              <td>${item.usuario}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+    listaHistorico.innerHTML = '<div class="timeline">' +
+      historicoFiltrado.map(item => {
+        const hora = formatarDataTimeline(item.data);
+        const tipo = item.tipo;
+        const usuario = item.usuario || 'Desconhecido';
+        const codigo = item.codigo || 'N/A';
+        const descricao = item.descricao || 'N/A';
+        const quantidadeAnterior = item.quantidadeAnterior || 0;
+        const quantidadeNova = item.quantidadeNova || 0;
+        const diferenca = quantidadeNova - quantidadeAnterior;
+        const simbolo = diferenca >= 0 ? '+' : '';
+        
+        let corDiferenca = '#28a745';
+        if (diferenca < 0) {
+          corDiferenca = '#dc3545';
+        } else if (tipo === 'Cadastro') {
+          corDiferenca = '#007bff';
+        } else if (tipo === 'Exclusão') {
+          corDiferenca = '#6c757d';
+        }
+        
+        let acao;
+        if (tipo === 'Cadastro') {
+          acao = `Cadastro`;
+        } else if (tipo === 'Exclusão') {
+          acao = `Exclusão`;
+        } else if (diferenca > 0) {
+          acao = `Entrada`;
+        } else if (diferenca < 0) {
+          acao = `Saída`;
+        } else {
+          acao = `Atualização`;
+        }
+        
+        return `
+          <div class="timeline-item">
+            <div class="timeline-time">${hora}</div>
+            <div class="timeline-content">
+              <div class="timeline-header">
+                <strong>${usuario}</strong>
+                <span class="timeline-acao" style="color: ${corDiferenca}; margin-left: 10px;">${acao}</span>
+              </div>
+              <div class="timeline-details">
+                ${tipo !== 'Exclusão' ? `
+                  <span class="timeline-diferenca" style="color: ${corDiferenca}; font-weight: bold;">${simbolo}${Math.abs(diferenca)}</span>
+                ` : ''}
+                <span class="timeline-codigo">${codigo}</span>
+                ${descricao !== 'N/A' ? `<span class="timeline-descricao">- ${descricao}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('') +
+    '</div>';
   }
 }
 
-// Dados das estantes (apenas para Sala P)
+// Função para abrir modal de configurações
+function abrirModalConfiguracoes() {
+  if (!estaLogado()) {
+    mostrarToast('❌ Faça login para acessar as configurações!', 'erro');
+    return;
+  }
+  document.getElementById('configuracoesModal').style.display = 'block';
+}
+
+// Função para fechar modal de configurações
+function fecharModalConfiguracoes() {
+  document.getElementById('configuracoesModal').style.display = 'none';
+}
+
+// Função para abrir modal de notificações
+function abrirModalNotificacoes() {
+  if (!estaLogado()) {
+    mostrarToast('❌ Faça login para ver as notificações!', 'erro');
+    return;
+  }
+  
+  const modal = document.getElementById('notificacoesModal');
+  const listaNotificacoes = document.getElementById('listaNotificacoes');
+  
+  if (notificacoes.length === 0) {
+    listaNotificacoes.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 18px;">🔔 Nenhuma notificação!</p>';
+  } else {
+    listaNotificacoes.innerHTML = notificacoes.map(notificacao => `
+      <div class="notificacao-item ${notificacao.lida ? 'lida' : 'nao-lida'}" onclick="marcarComoLida(${notificacao.id})">
+        <p>${notificacao.mensagem}</p>
+        <span class="notificacao-hora">${formatarDataTimeline(notificacao.data)}</span>
+      </div>
+    `).join('');
+  }
+  
+  modal.style.display = 'block';
+  marcarNotificacoesComoLidas();
+}
+
+// Função para fechar modal de notificações
+function fecharModalNotificacoes() {
+  document.getElementById('notificacoesModal').style.display = 'none';
+}
+
+// Função para marcar notificação como lida
+function marcarComoLida(id) {
+  const notificacao = notificacoes.find(n => n.id === id);
+  if (notificacao) {
+    notificacao.lida = true;
+    localStorage.setItem('mollibear_notificacoes', JSON.stringify(notificacoes));
+    
+    // Atualizar contador
+    const naoLidas = notificacoes.filter(n => !n.lida).length;
+    const contador = document.getElementById('contadorNotificacoes');
+    if (naoLidas > 0) {
+      contador.textContent = naoLidas;
+      contador.style.display = 'inline';
+    } else {
+      contador.style.display = 'none';
+    }
+  }
+}
+
+// Função para abrir modal de editar perfil
+function abrirModalEditarPerfil() {
+  fecharModalConfiguracoes();
+  abrirEditarUsuario(usuarioLogado.email, usuarioLogado.nome);
+}
+
+// Função para abrir modal de gerenciamento de usuários
+async function abrirGerenciarUsuarios() {
+  const modal = document.getElementById('gerenciarUsuariosModal');
+  modal.style.display = 'block';
+  
+  await listarUsuarios();
+}
+
+// Função para fechar modal de gerenciamento de usuários
+function fecharModalUsuarios() {
+  document.getElementById('gerenciarUsuariosModal').style.display = 'none';
+}
+
+// Função para listar usuários
+async function listarUsuarios() {
+  const listaUsuarios = document.getElementById('listaUsuarios');
+  const usuarios = await window.carregarUsuarios();
+  
+  if (usuarios.length === 0) {
+    listaUsuarios.innerHTML = '<p style="text-align: center; color: #d35f5f; font-size: 16px;">👥 Nenhum usuário cadastrado!</p>';
+    return;
+  }
+  
+  listaUsuarios.innerHTML = '<table style="width: 100%; border-collapse: collapse;">' +
+    '<thead>' +
+      '<tr style="background-color: var(--bege-claro);">' +
+        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Email</th>' +
+        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Nome</th>' +
+        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Nível</th>' +
+        '<th style="padding: 8px; border: 1px solid #8b4513; text-align: left;">Ações</th>' +
+      '</tr>' +
+    '</thead>' +
+    '<tbody>' +
+      usuarios.map(usuario => `
+        <tr style="border-bottom: 1px solid #f5e6d3;">
+          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.email}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.nome}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">${usuario.nivel === 'admin' ? 'Administrador' : 'Funcionário'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f5e6d3;">
+            <button class="button-fofo" onclick="abrirEditarUsuario('${usuario.email}', '${usuario.nome}')" style="padding: 6px 12px; font-size: 14px; margin-right: 5px;">✏️ Editar</button>
+            ${usuarioLogado.email !== usuario.email ? `
+              <button class="button-fofo" onclick="confirmarExcluirUsuario('${usuario.email}')" style="padding: 6px 12px; font-size: 14px; background-color: #f8c8c8; color: #721c24;">🗑️ Excluir</button>
+            ` : ''}
+          </td>
+        </tr>
+      `).join('') +
+    '</tbody>' +
+  '</table>';
+}
+
+// Função para abrir modal de editar usuário
+function abrirEditarUsuario(email, nomeAtual) {
+  document.getElementById('editarUsuarioModal').style.display = 'block';
+  document.getElementById('novoNomeUsuario').value = nomeAtual;
+  document.getElementById('editarUsuarioModal').dataset.email = email;
+}
+
+// Função para fechar modal de editar usuário
+function fecharModalEditarUsuario() {
+  document.getElementById('editarUsuarioModal').style.display = 'none';
+}
+
+// Função para salvar novo nome de usuário
+async function salvarNomeUsuario() {
+  const email = document.getElementById('editarUsuarioModal').dataset.email;
+  const novoNome = document.getElementById('novoNomeUsuario').value.trim();
+  const erroEditarUsuario = document.getElementById('erroEditarUsuario');
+  
+  if (!novoNome) {
+    erroEditarUsuario.textContent = '❌ Digite um nome válido!';
+    return;
+  }
+  
+  const sucesso = await window.atualizarNomeUsuario(email, novoNome);
+  
+  if (sucesso) {
+    fecharModalEditarUsuario();
+    mostrarToast('✅ Nome de usuário atualizado com sucesso!');
+    
+    // Atualizar o nome do usuário logado se for o próprio usuário
+    if (usuarioLogado && usuarioLogado.email === email) {
+      usuarioLogado.nome = novoNome;
+      document.getElementById('nomeUsuario').textContent = `👤 ${novoNome}`;
+      document.getElementById('nomeUsuarioConfig').textContent = novoNome;
+      localStorage.setItem('mollibear_usuario', JSON.stringify(usuarioLogado));
+    }
+    
+    // Atualizar a lista de usuários
+    await listarUsuarios();
+  } else {
+    erroEditarUsuario.textContent = '❌ Erro ao atualizar nome de usuário!';
+  }
+}
+
+// Função para confirmar exclusão de usuário
+function confirmarExcluirUsuario(email) {
+  if (confirm(`🐻 Tem certeza que deseja excluir o usuário ${email}?`)) {
+    excluirUsuario(email);
+  }
+}
+
+// Função para excluir usuário
+async function excluirUsuario(email) {
+  const sucesso = await window.excluirUsuario(email);
+  
+  if (sucesso) {
+    mostrarToast('✅ Usuário excluído com sucesso!');
+    await listarUsuarios();
+  } else {
+    mostrarToast('❌ Erro ao excluir usuário!', 'erro');
+  }
+}
+
+// Função para cadastrar novo usuário (Admin)
+async function cadastrarNovoUsuarioAdmin() {
+  const email = document.getElementById('novoEmailAdmin').value.trim();
+  const nome = document.getElementById('novoNomeAdmin').value.trim();
+  const senha = document.getElementById('novaSenhaAdmin').value;
+  const nivel = document.getElementById('novoNivelAdmin').value;
+  const erroCadastroUsuarioAdmin = document.getElementById('erroCadastroUsuarioAdmin');
+  
+  if (!email || !nome || !senha) {
+    erroCadastroUsuarioAdmin.textContent = '❌ Preencha todos os campos!';
+    return;
+  }
+  
+  // Validar formato de email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    erroCadastroUsuarioAdmin.textContent = '❌ Email inválido!';
+    return;
+  }
+  
+  // Verificar se o email já está cadastrado
+  const usuarios = await window.carregarUsuarios();
+  const emailJaExiste = usuarios.some(u => u.email === email);
+  
+  if (emailJaExiste) {
+    erroCadastroUsuarioAdmin.textContent = '❌ Este email já está cadastrado!';
+    return;
+  }
+  
+  const sucesso = await window.cadastrarUsuario(email, nome, senha, nivel);
+  
+  if (sucesso) {
+    mostrarToast('✅ Usuário cadastrado com sucesso!');
+    
+    // Limpar campos
+    document.getElementById('novoEmailAdmin').value = '';
+    document.getElementById('novoNomeAdmin').value = '';
+    document.getElementById('novaSenhaAdmin').value = '';
+    document.getElementById('novoNivelAdmin').value = 'funcionario';
+    
+    // Atualizar lista de usuários
+    await listarUsuarios();
+  } else {
+    erroCadastroUsuarioAdmin.textContent = '❌ Erro ao cadastrar usuário!';
+  }
+}
+
+// Dados das estantes (apenas para Sala P) - ESTANTES 17-21 MOVIDAS 280px PARA A ESQUERDA
 const estantes = [
   {n:1, x:20, y:600, w:50, h:80},
   {n:2, x:20, y:510, w:50, h:80},
@@ -1303,24 +2013,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const svg = document.querySelector(".mapa");
   const NS = "http://www.w3.org/2000/svg";
   
-  // Carregar o modo atual do localStorage
-  carregarModoAtual();
-  
-  // Definir o display inicial com base no modoAtual
-  if (modoAtual === 'sala_p') {
-    document.getElementById('mapaContainer').style.display = 'block';
-    document.getElementById('estoqueContainer').style.display = 'none';
-  } else {
-    document.getElementById('mapaContainer').style.display = 'none';
-    document.getElementById('estoqueContainer').style.display = 'block';
-  }
-  
   atualizarCoresEstantes();
 
   // Adicionar eventos aos botões
   document.getElementById('salvarProdutoBtn').addEventListener('click', salvarProduto);
   document.getElementById('buscaProduto').addEventListener('input', buscarProduto);
   document.getElementById('produtosCadastradosBtn').addEventListener('click', exibirProdutosCadastrados);
+  document.getElementById('produtosCadastradosBtnHeader').addEventListener('click', exibirProdutosCadastrados);
   document.querySelector('.close').addEventListener('click', fecharModal);
   document.getElementById('buscaProdutosModal').addEventListener('input', () => filtrarProdutosModal(1));
   document.getElementById('ordenarPor').addEventListener('change', () => {
@@ -1330,28 +2029,76 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelector('.close-estante').addEventListener('click', fecharModalEstante);
   document.getElementById('selecionarTodosBtn').addEventListener('click', selecionarTodos);
   document.getElementById('excluirSelecionadosBtn').addEventListener('click', excluirSelecionados);
-  document.getElementById('loginBtn').addEventListener('click', abrirModalLogin);
-  document.getElementById('logoutBtn').addEventListener('click', fazerLogout);
+  document.getElementById('loginBtnHeader').addEventListener('click', abrirModalLogin);
+  document.getElementById('logoutBtnHeader').addEventListener('click', fazerLogout);
   document.getElementById('entrarBtn').addEventListener('click', fazerLogin);
   document.querySelector('.close-login').addEventListener('click', fecharModalLogin);
   document.getElementById('modoSelect').addEventListener('change', trocarModo);
+  document.getElementById('modoSelectHeader').addEventListener('change', trocarModo);
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (modoAtual !== 'sala_p') exibirListaEstoque();
     else atualizarCoresEstantes();
   });
   document.getElementById('verHistoricoBtn').addEventListener('click', exibirHistorico);
+  document.getElementById('verHistoricoBtnHeader').addEventListener('click', exibirHistorico);
   document.querySelector('.close-historico').addEventListener('click', fecharModalHistorico);
   document.getElementById('buscarHistoricoBtn').addEventListener('click', buscarNoHistorico);
+  document.getElementById('gerenciarUsuariosBtn').addEventListener('click', abrirGerenciarUsuarios);
+  document.querySelector('.close-usuarios').addEventListener('click', fecharModalUsuarios);
+  document.getElementById('cadastrarUsuarioBtn').addEventListener('click', cadastrarNovoUsuarioAdmin);
+  document.querySelector('.close-editar-usuario').addEventListener('click', fecharModalEditarUsuario);
+  document.getElementById('salvarNomeUsuarioBtn').addEventListener('click', salvarNomeUsuario);
+  document.getElementById('esqueciSenhaBtn').addEventListener('click', abrirModalRecuperarSenha);
+  document.querySelector('.close-recuperar-senha').addEventListener('click', fecharModalRecuperarSenha);
+  document.getElementById('solicitarRecuperacaoBtn').addEventListener('click', solicitarRecuperacao);
+  document.getElementById('cadastrarBtn').addEventListener('click', abrirModalCadastroUsuario);
+  document.querySelector('.close-cadastro-usuario').addEventListener('click', fecharModalCadastroUsuario);
+  document.getElementById('criarContaBtn').addEventListener('click', criarConta);
+  document.getElementById('configuracoesBtn').addEventListener('click', abrirModalConfiguracoes);
+  document.querySelector('.close-configuracoes').addEventListener('click', fecharModalConfiguracoes);
+  document.getElementById('editarPerfilBtn').addEventListener('click', abrirModalEditarPerfil);
+  document.getElementById('notificacoesBtn').addEventListener('click', abrirModalNotificacoes);
+  document.querySelector('.close-notificacoes').addEventListener('click', fecharModalNotificacoes);
 
   // Inicializar o select de estantes
   preencherSelectEstantes();
 
+  // Carregar o modo atual do localStorage
+  carregarModoAtual();
+
+  // Carregar notificações do localStorage
+  const notificacoesSalvas = localStorage.getItem('mollibear_notificacoes');
+  if (notificacoesSalvas) {
+    notificacoes = JSON.parse(notificacoesSalvas);
+    const naoLidas = notificacoes.filter(n => !n.lida).length;
+    const contador = document.getElementById('contadorNotificacoes');
+    if (naoLidas > 0) {
+      contador.textContent = naoLidas;
+      contador.style.display = 'inline';
+    }
+  }
+
   // Verificar se o usuário já está logado
   if (estaLogado()) {
-    document.getElementById('loginBtn').style.display = 'none';
-    document.getElementById('logoutBtn').style.display = 'flex';
+    const usuarioSalvo = localStorage.getItem('mollibear_usuario');
+    if (usuarioSalvo) {
+      usuarioLogado = JSON.parse(usuarioSalvo);
+    }
+    
+    document.getElementById('loginBtnHeader').style.display = 'none';
+    document.getElementById('logoutBtnHeader').style.display = 'block';
+    document.getElementById('perfilUsuario').style.display = 'flex';
     document.getElementById('asideCadastro').style.display = 'flex';
-    usuarioLogado = "Administrador";
+    document.getElementById('nomeUsuario').textContent = `👤 ${usuarioLogado.nome}`;
+    document.getElementById('emailUsuarioConfig').textContent = usuarioLogado.email;
+    document.getElementById('nomeUsuarioConfig').textContent = usuarioLogado.nome;
+    document.getElementById('nivelUsuarioConfig').textContent = usuarioLogado.nivel === 'admin' ? 'Administrador' : 'Funcionário';
+    
+    if (usuarioLogado.nivel === 'admin') {
+      document.getElementById('gerenciarUsuariosBtn').style.display = 'block';
+    } else {
+      document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
+    }
     
     if (!migracaoConcluida) {
       executarMigracao();
@@ -1359,9 +2106,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       iniciarListenerFirestore();
     }
   } else {
-    document.getElementById('loginBtn').style.display = 'flex';
-    document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('loginBtnHeader').style.display = 'block';
+    document.getElementById('logoutBtnHeader').style.display = 'none';
+    document.getElementById('gerenciarUsuariosBtn').style.display = 'none';
+    document.getElementById('perfilUsuario').style.display = 'none';
     document.getElementById('asideCadastro').style.display = 'none';
+    document.getElementById('nomeUsuario').textContent = '👤 Convidado';
   }
 });
 
@@ -1378,8 +2128,8 @@ function atualizarCoresEstantes() {
   porta.setAttribute("y", 700);
   porta.setAttribute("width", 30);
   porta.setAttribute("height", 60);
-  porta.setAttribute("fill", "#6c757d");
-  porta.setAttribute("stroke", "#495057");
+  porta.setAttribute("fill", "#8b4513");
+  porta.setAttribute("stroke", "#000");
   porta.setAttribute("stroke-width", "2");
   svg.appendChild(porta);
   
@@ -1406,7 +2156,7 @@ function atualizarCoresEstantes() {
     rect.setAttribute("rx", 5);
     rect.setAttribute("fill", cor);
     rect.setAttribute("class", "estante");
-    rect.setAttribute("stroke", "#dee2e6");
+    rect.setAttribute("stroke", "#8b4513");
     rect.setAttribute("stroke-width", "1");
     rect.setAttribute("data-estante", estante.n);
     
@@ -1424,7 +2174,7 @@ function atualizarCoresEstantes() {
     texto.setAttribute("class", "numero");
     texto.setAttribute("text-anchor", "middle");
     texto.setAttribute("dominant-baseline", "middle");
-    texto.setAttribute("fill", "#495057");
+    texto.setAttribute("fill", "#8b4513");
     texto.setAttribute("font-size", "16");
     texto.setAttribute("font-weight", "bold");
     texto.textContent = estante.n;
@@ -1436,520 +2186,310 @@ function atualizarCoresEstantes() {
 
 <style>
   :root {
-    --primary: #ff9a8b;
-    --primary-dark: #f77062;
-    --secondary: #4ecdc4;
-    --success: #95e1d3;
-    --info: #a8e6cf;
-    --warning: #f3d34a;
-    --danger: #ff6b6b;
-    --light: #f8f9fa;
-    --dark: #343a40;
-    --white: #fff;
-    --gray: #6c757d;
-    --gray-light: #e9ecef;
-    --gray-dark: #495057;
-    --beige: #fff8f0;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-    --border-radius: 8px;
-    --border-radius-lg: 12px;
-  }
-
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+    --bege-claro: #f5e6d3;
+    --bege-escuro: #8b4513;
+    --bege-fundo: #fffaf0;
+    --rosa-suave: #f8c8c8;
+    --azul-suave: #d4e6f1;
+    --roxo-suave: #e6d4f1;
+    --verde: #d4edda;
+    --amarelo: #fff3cd;
+    --vermelho: #f8d7da;
   }
 
   body {
     margin: 0;
     padding: 0;
-    background-color: var(--beige);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bege-fundo);
+    font-family: 'Comic Sans MS', cursive, sans-serif;
     font-size: 16px;
-    color: var(--dark);
   }
 
-  .app {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 20px;
-  }
-
-  /* Header */
-  header {
-    background: var(--white);
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow);
-    margin-bottom: 20px;
-    padding: 20px;
+  /* Barra Superior Fixa */
+  .header-fixo {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--bege-fundo);
+    border-bottom: 2px solid var(--bege-claro);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    padding: 10px 0;
   }
 
   .header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 10px;
     display: flex;
-    flex-direction: column;
-    gap: 20px;
+    justify-content: space-between;
+    align-items: center;
   }
 
-  .logo-title {
+  .header-left, .header-center, .header-right {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 10px;
+  }
+
+  .header-left {
+    flex: 1;
+  }
+
+  .header-center {
+    flex: 2;
+    justify-content: center;
+  }
+
+  .header-right {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .title-text {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--bege-escuro);
   }
 
   .logo-img {
-    height: 70px;
+    height: 50px;
     width: auto;
     border-radius: 50%;
-    border: 3px solid var(--primary);
-    box-shadow: var(--shadow);
+    border: 2px solid var(--bege-escuro);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
-  .title-text h1 {
-    font-size: 28px;
-    color: var(--primary);
-    margin-bottom: 5px;
-  }
-
-  .title-text p {
-    color: var(--gray);
-    font-size: 16px;
-  }
-
-  .header-actions {
+  .perfil-usuario {
     display: flex;
-    flex-direction: column;
-    gap: 15px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .contador-notificacoes {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 6px;
+    font-size: 12px;
+    font-weight: bold;
+  }
+
+  /* Conteúdo principal com margin-top para não sobrepor a barra fixa */
+  .app {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 10px;
+    padding-top: 80px; /* Espaço para a barra fixa */
   }
 
   .contadores {
     display: flex;
     justify-content: center;
     gap: 20px;
+    margin-bottom: 15px;
     flex-wrap: wrap;
   }
 
   .contador {
+    background: var(--bege-fundo);
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    padding: 10px 15px;
+    font-size: 16px;
+    color: var(--bege-escuro);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     display: flex;
     align-items: center;
-    gap: 10px;
-    background: var(--light);
-    border-radius: var(--border-radius);
-    padding: 12px 16px;
-    box-shadow: var(--shadow);
-    min-width: 150px;
   }
 
-  .contador i {
-    color: var(--primary);
-    font-size: 20px;
+  .button-historico {
+    background: none;
+    border: none;
+    color: var(--bege-escuro);
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
   }
 
-  .contador-info {
+  .button-historico:hover {
+    color: var(--bege-escuro);
+    opacity: 0.8;
+  }
+
+  .notificacao {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 16px;
+    color: #856404;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    display: none;
+  }
+
+  .barra-progresso {
+    width: 100%;
+    height: 20px;
+    background-color: #e9ecef;
+    border-radius: 10px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .progresso {
+    height: 100%;
+    background-color: #ffc107;
+    width: 0%;
+    transition: width 0.5s;
+  }
+
+  .actions {
     display: flex;
-    flex-direction: column;
-  }
-
-  .contador-info span {
-    font-size: 14px;
-    color: var(--gray);
-  }
-
-  .contador-info strong {
-    font-size: 18px;
-    color: var(--dark);
-  }
-
-  .user-actions {
-    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 10px;
-    flex-wrap: wrap;
   }
 
-  /* Botões */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border: none;
-    border-radius: var(--border-radius);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 16px;
-    font-weight: 500;
+  .actions button, .actions select {
+    margin: 5px;
     cursor: pointer;
-    transition: all 0.3s;
-    box-shadow: var(--shadow);
   }
 
-  .btn i {
+  .button-fofo {
+    padding: 12px 20px;
+    background-color: var(--bege-claro);
+    color: var(--bege-escuro);
+    border: 2px solid var(--bege-escuro);
+    border-radius: 20px;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-weight: bold;
     font-size: 16px;
+    transition: all 0.3s;
   }
 
-  .btn-primary {
-    background: var(--primary);
-    color: var(--white);
+  .button-fofo:hover {
+    background-color: var(--bege-escuro);
+    color: var(--bege-fundo);
+    transform: scale(1.05);
   }
 
-  .btn-primary:hover {
-    background: var(--primary-dark);
-    transform: translateY(-2px);
+  .button-fofo.active {
+    background-color: var(--bege-escuro);
+    color: var(--bege-fundo);
   }
 
-  .btn-secondary {
-    background: var(--light);
-    color: var(--dark);
-    border: 1px solid var(--gray-light);
-  }
-
-  .btn-secondary:hover {
-    background: var(--gray-light);
-    transform: translateY(-2px);
-  }
-
-  .btn-success {
-    background: var(--success);
-    color: var(--dark);
-  }
-
-  .btn-success:hover {
-    background: #78d6c6;
-    transform: translateY(-2px);
-  }
-
-  .btn-info {
-    background: var(--info);
-    color: var(--dark);
-  }
-
-  .btn-info:hover {
-    background: #88d8c0;
-    transform: translateY(-2px);
-  }
-
-  .btn-danger {
-    background: var(--danger);
-    color: var(--white);
-  }
-
-  .btn-danger:hover {
-    background: #ff5252;
-    transform: translateY(-2px);
-  }
-
-  .btn-login {
-    background: var(--warning);
-    color: var(--dark);
-  }
-
-  .btn-login:hover {
-    background: #e6c240;
-    transform: translateY(-2px);
-  }
-
-  .btn-logout {
-    background: var(--gray);
-    color: var(--white);
-  }
-
-  .btn-logout:hover {
-    background: var(--gray-dark);
-    transform: translateY(-2px);
-  }
-
-  .btn-block {
-    width: 100%;
-  }
-
-  .btn-paginacao {
-    background: var(--white);
-    color: var(--primary);
-    border: 1px solid var(--primary);
-    padding: 8px 12px;
-    min-width: 40px;
-  }
-
-  .btn-paginacao:hover {
-    background: var(--primary);
-    color: var(--white);
-  }
-
-  .btn-paginacao.active {
-    background: var(--primary);
-    color: var(--white);
-  }
-
-  .btn-save-quantidade {
-    background: var(--success);
-    color: var(--dark);
-    padding: 6px 10px;
-    border-radius: var(--border-radius);
-    border: none;
+  .button-salvar-quantidade {
+    padding: 6px 12px;
+    background-color: #d4edda;
+    color: #155724;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-weight: bold;
+    font-size: 16px;
     cursor: pointer;
     transition: all 0.2s;
   }
 
-  .btn-save-quantidade:hover {
-    background: #78d6c6;
-    transform: scale(1.1);
+  .button-salvar-quantidade:hover {
+    background-color: #28a745;
+    color: white;
+    transform: scale(1.05);
   }
 
-  /* Select */
-  .select-fofo {
-    padding: 10px 16px;
-    border: 2px solid var(--gray-light);
-    border-radius: var(--border-radius);
-    background: var(--white);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  aside {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  main {
+    width: 100%;
+  }
+
+  .card {
+    background: var(--bege-fundo);
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .card h2, .card h3 {
+    margin-top: 0;
+    font-size: 20px;
+    color: var(--bege-escuro);
+    border-bottom: 2px solid var(--bege-claro);
+    padding-bottom: 10px;
+  }
+
+  .card h3 {
+    font-size: 18px;
+  }
+
+  .card label {
+    display: block;
+    margin-top: 12px;
+    font-weight: bold;
+    color: var(--bege-escuro);
     font-size: 16px;
-    color: var(--dark);
-    cursor: pointer;
-    transition: all 0.3s;
-    box-shadow: var(--shadow);
   }
 
-  .select-fofo:focus {
-    border-color: var(--primary);
-    outline: none;
-  }
-
-  /* Inputs */
   .input-fofo {
     width: 100%;
-    padding: 12px 16px;
-    border: 2px solid var(--gray-light);
-    border-radius: var(--border-radius);
-    background: var(--white);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 12px;
+    margin-top: 6px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
     font-size: 16px;
-    color: var(--dark);
-    transition: all 0.3s;
-    box-shadow: var(--shadow);
   }
 
   .input-fofo:focus {
-    border-color: var(--primary);
+    border-color: var(--bege-escuro);
     outline: none;
   }
 
-  .input-quantidade {
-    width: 80px;
-    padding: 8px 12px;
-    border: 2px solid var(--gray-light);
-    border-radius: var(--border-radius);
-    background: var(--white);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 16px;
-    color: var(--dark);
-    text-align: center;
-    transition: all 0.3s;
-  }
-
-  .input-quantidade:focus {
-    border-color: var(--primary);
-    outline: none;
-  }
-
-  /* Content */
-  .content {
+  .row {
     display: flex;
-    gap: 20px;
+    gap: 10px;
   }
 
-  /* Sidebar */
-  .sidebar {
+  .row div {
+    flex: 1;
+  }
+
+  .save {
+    margin-top: 20px;
     width: 100%;
-    max-width: 350px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  /* Main Content */
-  .main-content {
-    flex: 1;
-  }
-
-  /* Cards */
-  .card {
-    background: var(--white);
-    border-radius: var(--border-radius-lg);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-  }
-
-  .card-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: var(--white);
-    padding: 15px 20px;
-  }
-
-  .card-header h2 {
-    margin: 0;
-    font-size: 18px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .card-body {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  /* Form Groups */
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .form-group label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--dark);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .form-group label i {
-    color: var(--primary);
-  }
-
-  .form-row {
-    display: flex;
-    gap: 15px;
-  }
-
-  .form-row .form-group {
-    flex: 1;
-  }
-
-  /* Produto Card */
-  .produto-card {
-    background: var(--white);
-    border: 1px solid var(--gray-light);
-    border-radius: var(--border-radius);
-    padding: 15px;
-    margin-bottom: 15px;
-    box-shadow: var(--shadow);
-    transition: all 0.3s;
-    position: relative;
-  }
-
-  .produto-card:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-2px);
-  }
-
-  .checkbox-produto {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-  }
-
-  .produto-info {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .produto-header {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .produto-codigo {
     font-size: 16px;
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
-  .produto-descricao {
-    font-size: 16px;
-    color: var(--dark);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .produto-details {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .produto-detail {
-    font-size: 14px;
-    color: var(--gray);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .produto-quantidade {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--gray-light);
-  }
-
-  .quantidade-label {
-    font-size: 14px;
-    color: var(--dark);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .quantidade-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  /* Section Header */
-  .section-header {
-    margin-bottom: 20px;
-  }
-
-  .section-header h2 {
-    font-size: 24px;
-    color: var(--primary);
-    margin-bottom: 5px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .section-description {
-    color: var(--gray);
-    font-size: 16px;
-    text-align: center;
-  }
-
-  /* Mapa */
   .mapa-container {
     width: 100%;
     overflow-x: auto;
-    border: 1px solid var(--gray-light);
-    border-radius: var(--border-radius);
-    background: var(--white);
-    box-shadow: var(--shadow);
-    margin-bottom: 20px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    background-color: var(--bege-fundo);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   }
 
   .mapa {
@@ -1959,22 +2499,116 @@ function atualizarCoresEstantes() {
     display: block;
   }
 
+  .estoque-list-container {
+    width: 100%;
+    border: 2px solid var(--bege-claro);
+    border-radius: 12px;
+    background-color: var(--bege-fundo);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+  }
+
   .rodape {
+    margin-top: 15px;
+    font-style: italic;
+    color: var(--bege-escuro);
     text-align: center;
-    color: var(--gray);
+    font-size: 18px;
+  }
+
+  .result {
+    margin-top: 16px;
+    padding: 12px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background: var(--bege-fundo);
     font-size: 16px;
-    margin-bottom: 20px;
+  }
+
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
     display: flex;
-    align-items: center;
     justify-content: center;
-    gap: 8px;
+    align-items: center;
+    z-index: 2000;
   }
 
-  .rodape i {
-    color: var(--primary);
+  .modal-content {
+    background: var(--bege-fundo);
+    padding: 25px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 80%;
+    overflow: auto;
+    border: 2px solid var(--bege-claro);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   }
 
-  /* Legenda do Mapa */
+  .modal-content h2 {
+    color: var(--bege-escuro);
+    margin-top: 0;
+    text-align: center;
+    font-size: 22px;
+  }
+
+  .close, .close-estante, .close-login, .close-historico, .close-usuarios, .close-editar-usuario, .close-recuperar-senha, .close-cadastro-usuario, .close-configuracoes, .close-notificacoes {
+    float: right;
+    font-size: 28px;
+    cursor: pointer;
+    color: var(--bege-escuro);
+  }
+
+  .close:hover, .close-estante:hover, .close-login:hover, .close-historico:hover, .close-usuarios:hover, .close-editar-usuario:hover, .close-recuperar-senha:hover, .close-cadastro-usuario:hover, .close-configuracoes:hover, .close-notificacoes:hover {
+    color: #ff6b6b;
+  }
+
+  .estante {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .estante:hover {
+    opacity: 0.8;
+    stroke-width: 2;
+  }
+
+  .numero {
+    font-size: 16px;
+    font-weight: bold;
+  }
+
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  input[type="text"],
+  input[type="number"] {
+    padding: 10px;
+    border: 2px solid var(--bege-claro);
+    border-radius: 8px;
+    background-color: #fff;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    font-size: 16px;
+    width: 100%;
+  }
+
+  input[type="number"] {
+    padding: 6px;
+  }
+
+  input[type="number"]:focus,
+  input[type="email"]:focus,
+  input[type="password"]:focus,
+  input[type="text"]:focus {
+    border-color: var(--bege-escuro);
+    outline: none;
+  }
+
   .legenda-mapa {
     display: flex;
     justify-content: center;
@@ -1986,9 +2620,9 @@ function atualizarCoresEstantes() {
   .legenda-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     font-size: 14px;
-    color: var(--dark);
+    color: var(--bege-escuro);
   }
 
   .cor-verde, .cor-amarelo, .cor-vermelho, .cor-vazio {
@@ -1996,241 +2630,252 @@ function atualizarCoresEstantes() {
     width: 20px;
     height: 20px;
     border-radius: 4px;
-    border: 1px solid var(--gray-light);
+    border: 1px solid #8b4513;
   }
 
-  .cor-verde { background-color: var(--success); }
-  .cor-amarelo { background-color: var(--warning); }
-  .cor-vermelho { background-color: var(--danger); }
-  .cor-vazio { background-color: var(--light); }
+  .cor-verde { background-color: var(--verde); }
+  .cor-amarelo { background-color: var(--amarelo); }
+  .cor-vermelho { background-color: var(--vermelho); }
+  .cor-vazio { background-color: #f5e6d3; }
 
-  /* Estoque List Container */
-  .estoque-list-container {
-    background: var(--white);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    padding: 20px;
-  }
-
-  /* Pagination */
-  .paginacao-group {
+  .paginacao {
     display: flex;
     justify-content: center;
     gap: 10px;
     margin-top: 20px;
-    flex-wrap: wrap;
   }
 
-  /* Empty Message */
-  .empty-message {
-    text-align: center;
-    padding: 20px;
-    color: var(--gray);
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+  .paginacao button {
+    padding: 8px 16px;
+    border-radius: 8px;
   }
 
-  .empty-message i {
-    color: var(--primary);
-    font-size: 20px;
-  }
-
-  /* Error Message */
-  .erro-message {
-    color: var(--danger);
-    font-size: 16px;
-    text-align: center;
-    margin-top: 10px;
-  }
-
-  /* Modal */
-  .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-  }
-
-  .modal-content {
-    background: var(--white);
-    border-radius: var(--border-radius-lg);
-    width: 90%;
-    max-width: 800px;
-    max-height: 85%;
-    overflow: auto;
-    box-shadow: var(--shadow-lg);
-  }
-
-  .modal-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: var(--white);
-    padding: 15px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
-  }
-
-  .modal-header h2 {
-    margin: 0;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .close, .close-estante, .close-login, .close-historico {
-    font-size: 24px;
-    cursor: pointer;
-    color: var(--white);
-    transition: all 0.3s;
-  }
-
-  .close:hover, .close-estante:hover, .close-login:hover, .close-historico:hover {
-    color: var(--light);
-    transform: scale(1.2);
-  }
-
-  .modal-body {
-    padding: 20px;
-  }
-
-  .modal-filters {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-  }
-
-  .modal-filters .input-fofo, .modal-filters .select-fofo {
-    flex: 1;
-    min-width: 200px;
-  }
-
-  /* Histórico Table */
-  .historico-table {
+  /* Estilo para a tabela do histórico */
+  table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
   }
 
-  .historico-table th {
-    background: var(--primary);
-    color: var(--white);
-    padding: 12px;
+  th {
+    background-color: var(--bege-claro);
+    padding: 10px;
+    border: 1px solid #8b4513;
     text-align: left;
-    font-weight: 600;
+    font-weight: bold;
+    color: var(--bege-escuro);
   }
 
-  .historico-table td {
-    padding: 12px;
-    border-bottom: 1px solid var(--gray-light);
-    color: var(--dark);
+  td {
+    padding: 10px;
+    border-bottom: 1px solid #f5e6d3;
+    color: var(--bege-escuro);
   }
 
-  .historico-table tr:hover {
-    background: rgba(255, 154, 139, 0.1);
+  tr:hover {
+    background-color: rgba(245, 230, 211, 0.3);
   }
 
-  .tipo-badge {
-    padding: 4px 8px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    display: inline-block;
-  }
-
-  .tipo-badge.cadastro {
-    background: rgba(78, 205, 196, 0.2);
-    color: var(--secondary);
-  }
-
-  .tipo-badge.atualizacao {
-    background: rgba(149, 225, 211, 0.2);
-    color: var(--success);
-  }
-
-  .tipo-badge.exclusao {
-    background: rgba(255, 107, 107, 0.2);
-    color: var(--danger);
-  }
-
-  /* Notificação */
-  .notificacao {
-    background: var(--warning);
-    border-radius: var(--border-radius);
-    padding: 15px;
-    margin-bottom: 15px;
-    text-align: center;
+  /* Toast Notification */
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #fff;
+    border: 2px solid var(--bege-escuro);
+    border-radius: 8px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     font-size: 16px;
-    color: var(--dark);
-    box-shadow: var(--shadow);
-    display: none;
+    z-index: 3000;
+    animation: slideIn 0.3s ease-out;
   }
 
-  .barra-progresso {
-    width: 100%;
-    height: 20px;
-    background-color: var(--gray-light);
-    border-radius: 10px;
-    margin-top: 10px;
-    overflow: hidden;
+  .toast.sucesso {
+    background: #d4edda;
+    color: #155724;
+    border-color: #28a745;
   }
 
-  .progresso {
-    height: 100%;
-    background-color: var(--primary);
-    width: 0%;
-    transition: width 0.5s;
-    border-radius: 10px;
+  .toast.erro {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #dc3545;
   }
 
-  /* Responsive */
-  @media (max-width: 768px) {
-    .app {
-      padding: 10px;
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
     }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
 
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding-left: 30px;
+    list-style: none;
+  }
+
+  .timeline:before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--bege-escuro);
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 20px;
+    padding-left: 20px;
+  }
+
+  .timeline-item:before {
+    content: '';
+    position: absolute;
+    left: -30px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--bege-escuro);
+    border: 2px solid #fff;
+  }
+
+  .timeline-time {
+    font-size: 14px;
+    color: #6c757d;
+    margin-bottom: 5px;
+  }
+
+  .timeline-content {
+    background: var(--bege-fundo);
+    border: 1px solid var(--bege-claro);
+    border-radius: 8px;
+    padding: 12px;
+    margin-left: 10px;
+  }
+
+  .timeline-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .timeline-acao {
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  .timeline-details {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .timeline-diferenca {
+    font-size: 16px;
+  }
+
+  .timeline-codigo {
+    font-weight: bold;
+    color: var(--bege-escuro);
+  }
+
+  .timeline-descricao {
+    font-size: 14px;
+    color: #6c757d;
+  }
+
+  /* Notificações */
+  .notificacao-item {
+    padding: 12px;
+    border-bottom: 1px solid var(--bege-claro);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .notificacao-item:hover {
+    background: rgba(245, 230, 211, 0.3);
+  }
+
+  .notificacao-item.nao-lida {
+    background: rgba(253, 230, 138, 0.2);
+    font-weight: bold;
+  }
+
+  .notificacao-item.lida {
+    opacity: 0.8;
+  }
+
+  .notificacao-hora {
+    font-size: 12px;
+    color: #6c757d;
+    display: block;
+    margin-top: 5px;
+  }
+
+  /* Media Queries para responsividade */
+  @media (min-width: 768px) {
     .content {
+      flex-direction: row;
+    }
+    
+    aside {
+      width: 300px;
+    }
+    
+    main {
+      flex: 1;
+    }
+    
+    .header-center {
+      flex: 3;
+    }
+    
+    .mapa-container {
+      min-width: auto;
+    }
+    
+    .mapa {
+      min-width: auto;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .header-content {
       flex-direction: column;
+      gap: 10px;
     }
-
-    .sidebar {
-      max-width: 100%;
-    }
-
-    .contadores {
-      justify-content: center;
-    }
-
-    .user-actions {
-      justify-content: center;
-    }
-
-    .form-row {
-      flex-direction: column;
-    }
-
-    .modal-content {
-      width: 95%;
-      max-height: 90%;
-    }
-
-    .modal-filters {
-      flex-direction: column;
-    }
-
-    .modal-filters .input-fofo, .modal-filters .select-fofo {
+    
+    .header-left, .header-center, .header-right {
+      flex: 1;
       width: 100%;
+      justify-content: center;
+    }
+    
+    .title-text {
+      font-size: 18px;
+    }
+    
+    .logo-img {
+      height: 40px;
+    }
+    
+    .header-center {
+      order: 3;
+    }
+    
+    .header-right {
+      order: 2;
     }
   }
 </style>
